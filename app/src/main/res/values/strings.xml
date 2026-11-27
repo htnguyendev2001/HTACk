@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">BMI</string>
+    <string name="app_name">HTA Ck</string>
     <string name="bmi">Tính BMI</string>
     <string name="weight">nhập cân nặng (kg)</string>
     <string name="input_height">nhập chiều cao (cm)</string>
