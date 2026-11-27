@@ -1,22 +1,22 @@
 ---
 name: relationship-app
-description: Project-specific guidance for designing and implementing HTA Ck, a privacy-first Android relationship-organizing app. Use for product planning, Android implementation, personal-data handling, reminders, and any proposed HTAVk integration.
+description: Project-specific guidance for designing and implementing HTVA Ck, a privacy-first Android relationship-organizing app. Use for product planning, Android implementation, personal-data handling, reminders, and any proposed HTVA Vk integration.
 ---
 
-# HTA Ck — Relationship App Skill
+# HTVA Ck — Relationship App Skill
 
 ## 1. Identity
 
-- App: **HTA Ck**
+- App: **HTVA Ck**
 - Application ID: **com.htanh.appck**
-- Related, separate app: **HTAVk**
-- HTAVk application ID: **com.htanh.appvk**
+- Related, separate app: **HTVA Vk**
+- HTVA Vk application ID: **com.htanh.appvk**
 
 These identifiers are not interchangeable. Do not assume an integration exists.
 
 ## 2. Product framing
 
-Design HTA Ck as a respectful personal organizer for relationship-related information. Suitable directions include:
+Design HTVA Ck as a respectful personal organizer for relationship-related information. Suitable directions include:
 
 - Important dates and reminders.
 - Shared plans, activities and date ideas.
@@ -59,9 +59,9 @@ The existing codebase is Android Native Java with XML layouts and Gradle Groovy 
 - Avoid global package replacement. Trace imports, activity declarations, generated resources and source paths before a package migration.
 - Request only runtime permissions that a clearly defined feature needs.
 
-## 6. HTAVk integration
+## 6. HTVA Vk integration
 
-Any future HTA Ck ↔ HTAVk integration is a separate design decision. Before implementation, define:
+Any future HTVA Ck ↔ HTVA Vk integration is a separate design decision. Before implementation, define:
 
 - The user value and exact data being shared.
 - Explicit opt-in and revocation behavior.
