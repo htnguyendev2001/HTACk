@@ -1,10 +1,10 @@
-# AGENTS.md — HTA Ck
+# AGENTS.md — HTVA Ck
 
 ## 1. Project identity
 
-- Product name: **HTA Ck**.
+- Product name: **HTVA Ck**.
 - Android application ID: **com.htanh.appck**.
-- Related but separate app: **HTAVk**, application ID **com.htanh.appvk**.
+- Related but separate app: **HTVA Vk**, application ID **com.htanh.appvk**.
 - Never swap these IDs or assume the two apps already communicate.
 - Read README.md and .agents/skills/relationship-app/SKILL.md before product or architecture work.
 
@@ -30,7 +30,7 @@ The repository currently uses Android Native Java, XML layouts/resources and Gra
 
 ## 4. Android identity and package rules
 
-The intended application ID is com.htanh.appck; HTAVk remains com.htanh.appvk.
+The intended application ID is com.htanh.appck; HTVA Vk remains com.htanh.appvk.
 
 Treat these as distinct concepts:
 
@@ -41,11 +41,11 @@ Treat these as distinct concepts:
 
 Do not perform a blind global replacement of com.example.bmi. Before changing namespace, manifest package, source package declarations, imports, generated R references or file paths, inspect all usages and plan the migration. A change to applicationId alone does not migrate Java packages.
 
-Keep the launcher label aligned with HTA Ck. Do not leave project identity configured as BMI where it is directly user-facing, but do not rename unrelated resources/classes without checking references.
+Keep the launcher label aligned with HTVA Ck. Do not leave project identity configured as BMI where it is directly user-facing, but do not rename unrelated resources/classes without checking references.
 
 ## 5. Product boundaries and consent
 
-HTA Ck is a personal relationship-organizing tool, not a surveillance or coercive-control tool.
+HTVA Ck is a personal relationship-organizing tool, not a surveillance or coercive-control tool.
 
 Allowed product directions include personal reminders, important dates, shared plans, date ideas, memories and notes about information voluntarily shared.
 
@@ -54,7 +54,7 @@ Never implement or facilitate:
 - Covert location tracking or hidden monitoring.
 - Reading private messages or accessing another person's accounts without authorization.
 - Hidden audio/video recording, spyware, stealth collection or permission bypass.
-- Sharing personal information with HTAVk without clear, informed, revocable consent.
+- Sharing personal information with HTVA Vk without clear, informed, revocable consent.
 
 Clearly distinguish owner-entered notes from information the partner voluntarily provides. Make sharing state visible and revocable.
 
@@ -68,9 +68,9 @@ Clearly distinguish owner-entered notes from information the partner voluntarily
 - Never add a backend, cloud database, Firebase, Supabase, analytics, advertising SDK or third-party data processor without explicit approval.
 - Never commit keystores, signing credentials, tokens, passwords, OAuth secrets, service-account keys or local machine configuration.
 
-## 7. HTAVk relationship
+## 7. HTVA Vk relationship
 
-HTAVk is a separate Android application with application ID com.htanh.appvk.
+HTVA Vk is a separate Android application with application ID com.htanh.appvk.
 
 Do not assume a shared database, API, authentication system, deep-link contract, permissions model or data-sharing agreement exists. Propose an explicit integration design first. Any future sharing must be opt-in, scoped, authenticated, auditable where appropriate and revocable.
 
