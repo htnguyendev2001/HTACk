@@ -84,7 +84,7 @@ function requireSession_(token) {
 
 function sanitizeExamForStudent_(exam) {
   const safeExam = JSON.parse(JSON.stringify(exam));
-  ["answerKey", "correctAnswers", "solutions", "gradingRubric"].forEach(function(key) {
+  ["answerKey", "correctAnswers", "solutions", "gradingRubric", "teacherIds"].forEach(function(key) {
     delete safeExam[key];
   });
   (safeExam.questions || []).forEach(function(question) {
@@ -201,7 +201,8 @@ function teacherSubmissions_(actor, payload) {
           studentUid: uid, studentName: users[uid].displayName || "",
           attemptId: attemptId, examId: item.examId,
           submittedAt: item.submittedAt, status: item.status,
-          score: item.score, answers: item.answers
+          score: item.score, answers: item.answers,
+          questions: exams[item.examId].questions || []
         });
       }
     });
