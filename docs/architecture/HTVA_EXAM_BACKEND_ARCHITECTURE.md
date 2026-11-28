@@ -74,6 +74,7 @@ Grade payload: `{ studentUid, attemptId, score, feedback }`. The server verifies
 ## Known limitations before production
 
 - Apps Script is subject to execution quotas, request latency and concurrent execution limits. It is appropriate for a modest pilot, not unbounded exam traffic.
+- The current teacher inbox scans user submission nodes and returns at most 100 items; add an exam-based submission index and pagination before scaling to many users. Student history is also capped at 100 records per response.
 - CacheService sessions may be evicted before expiry; the user must log in again.
 - The first milestone does not yet implement a full offline submission queue, exam authoring UI, timed-exam enforcement, attachment uploads, or detailed automatic grading.
 - HTTPS transport and server-side authorization are mandatory, but this is not a substitute for a security review, abuse testing, backup/restore testing and an operational account-recovery process.
