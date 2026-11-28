@@ -51,6 +51,7 @@ public final class HtvaApiClient {
                 if (endpoint.isEmpty()) throw new IllegalStateException("Chưa cấu hình HTVA_API_BASE_URL.");
                 URL url = new URL(endpoint);
                 connection = (HttpURLConnection) url.openConnection();
+                connection.setInstanceFollowRedirects(false);
                 connection.setRequestMethod("POST");
                 connection.setConnectTimeout(15000);
                 connection.setReadTimeout(20000);
@@ -69,6 +70,24 @@ public final class HtvaApiClient {
                 }
 
                 int status = connection.getResponseCode();
+                if (status == HttpURLConnection.HTTP_MOVED_TEMP ||
+                        status == HttpURLConnection.HTTP_MOVED_PERM ||
+                        status == HttpURLConnection.HTTP_SEE_OTHER) {
+                    String location = connection.getHeaderField("Location");
+                    connection.disconnect();
+                    if (location == null) throw new IllegalStateException("Máy chủ không trả về địa chỉ phản hồi.");
+                    URL redirectUrl = new URL(location);
+                    if (!"https".equalsIgnoreCase(redirectUrl.getProtocol()) ||
+                            !"script.googleusercontent.com".equalsIgnoreCase(redirectUrl.getHost())) {
+                        throw new IllegalStateException("Địa chỉ chuyển hướng không an toàn.");
+                    }
+                    connection = (HttpURLConnection) redirectUrl.openConnection();
+                    connection.setRequestMethod("GET");
+                    connection.setConnectTimeout(15000);
+                    connection.setReadTimeout(20000);
+                    connection.setRequestProperty("Accept", "application/json");
+                    status = connection.getResponseCode();
+                }
                 InputStream stream = status >= 200 && status < 400
                         ? connection.getInputStream() : connection.getErrorStream();
                 String responseText = readAll(stream);
