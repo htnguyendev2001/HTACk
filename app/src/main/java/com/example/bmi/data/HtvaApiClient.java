@@ -44,8 +44,8 @@ public final class HtvaApiClient {
                 connection = (HttpURLConnection) url.openConnection();
                 connection.setInstanceFollowRedirects(false);
                 connection.setRequestMethod("POST");
-                connection.setConnectTimeout(12000);
-                connection.setReadTimeout(20000);
+                connection.setConnectTimeout(15000);
+                connection.setReadTimeout(45000);
                 connection.setDoOutput(true);
                 connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
                 connection.setRequestProperty("Accept", "application/json");
@@ -77,8 +77,8 @@ public final class HtvaApiClient {
                     }
                     connection = (HttpURLConnection) redirectUrl.openConnection();
                     connection.setRequestMethod("GET");
-                    connection.setConnectTimeout(12000);
-                    connection.setReadTimeout(20000);
+                    connection.setConnectTimeout(15000);
+                    connection.setReadTimeout(45000);
                     connection.setRequestProperty("Accept", "application/json");
                     status = connection.getResponseCode();
                 }

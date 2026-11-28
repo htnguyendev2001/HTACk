@@ -29,12 +29,12 @@ function doPost(e) {
         data = myHistory_(deviceId);
         break;
       case "teacherSubmissions":
-        requireTeacherCode_(payload);
+        requireTeacherCode_(payload, deviceId);
         data = teacherSubmissions_();
         break;
       case "gradeSubmission":
-        requireTeacherCode_(payload);
-        data = gradeSubmission_(payload);
+        requireTeacherCode_(payload, deviceId);
+        data = gradeSubmission_(payload, deviceId);
         break;
       default:
         throw apiError_("UNKNOWN_ACTION", "Yêu cầu không được hỗ trợ.");
@@ -195,7 +195,7 @@ function teacherSubmissions_() {
   return { items: result.slice(0, 200) };
 }
 
-function gradeSubmission_(payload) {
+function gradeSubmission_(payload, teacherDeviceId) {
   const deviceId = normalizeDeviceId_(payload.studentUid);
   const attemptId = safeId_(payload.attemptId, "attemptId");
   const score = Number(payload.score);
@@ -209,9 +209,10 @@ function gradeSubmission_(payload) {
   submission.status = "graded";
   submission.score = score;
   submission.feedback = feedback;
+  submission.gradedByDeviceId = teacherDeviceId;
   submission.gradedAt = Date.now();
   dbPut_(path, submission);
-  audit_(deviceId, "grade_submission", attemptId);
+  audit_(teacherDeviceId, "grade_submission", attemptId);
   return { attemptId: attemptId, status: "graded", score: score };
 }
 
@@ -283,20 +284,28 @@ function enforceSubmissionRateLimit_(deviceId) {
   }
 }
 
-function requireTeacherCode_(payload) {
+function requireTeacherCode_(payload, deviceId) {
   const expected = PropertiesService.getScriptProperties().getProperty("HTVA_TEACHER_ACCESS_CODE");
   const supplied = String(payload.accessCode || "");
   if (!expected || expected.length < 8) {
     throw apiError_("TEACHER_NOT_CONFIGURED", "Chưa cấu hình mã truy cập giáo viên trên máy chủ.");
   }
-  if (supplied.length !== expected.length) {
+  const cache = CacheService.getScriptCache();
+  const failureKey = "teacherfail:" + deviceId;
+  const failures = Number(cache.get(failureKey) || 0);
+  if (failures >= 8) {
+    throw apiError_("RATE_LIMITED", "Bạn đã nhập sai mã giáo viên quá nhiều lần. Vui lòng thử lại sau.");
+  }
+  let diff = supplied.length ^ expected.length;
+  const length = Math.max(supplied.length, expected.length);
+  for (let i = 0; i < length; i++) {
+    diff |= (supplied.charCodeAt(i) || 0) ^ (expected.charCodeAt(i) || 0);
+  }
+  if (diff !== 0) {
+    cache.put(failureKey, String(failures + 1), 900);
     throw apiError_("TEACHER_ACCESS_DENIED", "Mã truy cập giáo viên không đúng.");
   }
-  let diff = 0;
-  for (let i = 0; i < expected.length; i++) {
-    diff |= expected.charCodeAt(i) ^ supplied.charCodeAt(i);
-  }
-  if (diff !== 0) throw apiError_("TEACHER_ACCESS_DENIED", "Mã truy cập giáo viên không đúng.");
+  cache.remove(failureKey);
 }
 
 function safeId_(value, field) {

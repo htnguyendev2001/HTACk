@@ -30,6 +30,8 @@ jobs:
           accept-android-sdk-licenses: true
       - name: Install Android SDK packages
         run: sdkmanager "platforms;android-32" "build-tools;32.0.0"
+      - name: Check Apps Script syntax
+        run: node --check --input-type=commonjs < backend/apps-script/Code.gs
       - name: Build and test
         run: |
           chmod +x ./gradlew
