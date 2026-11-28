@@ -139,25 +139,33 @@ function submitAttempt_(actor, payload) {
   }
 
   const path = "submissions/" + actor.uid + "/" + attemptId;
-  const existing = dbGet_(path);
-  if (existing) {
-    if (existing.examId !== examId) throw apiError_("ATTEMPT_CONFLICT", "Mã lượt làm bài đã được sử dụng.");
-    return { attemptId: attemptId, status: existing.status || "submitted", duplicate: true };
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  let result;
+  try {
+    const existing = dbGet_(path);
+    if (existing) {
+      if (existing.examId !== examId) throw apiError_("ATTEMPT_CONFLICT", "Mã lượt làm bài đã được sử dụng.");
+      return { attemptId: attemptId, status: existing.status || "submitted", duplicate: true };
+    }
+    const previous = dbGet_("submissions/" + actor.uid) || {};
+    const maxAttempts = Math.max(1, Number(exam.maxAttempts || 1));
+    const usedAttempts = Object.keys(previous).filter(function(id) {
+      return previous[id] && previous[id].examId === examId;
+    }).length;
+    if (usedAttempts >= maxAttempts) throw apiError_("ATTEMPT_LIMIT", "Bạn đã sử dụng hết số lượt làm bài.");
+    const submission = {
+      uid: actor.uid, examId: examId, attemptId: attemptId,
+      answers: payload.answers, submittedAt: now,
+      status: "pending", score: null, feedback: "", gradedBy: null, gradedAt: null
+    };
+    dbPut_(path, submission);
+    result = { attemptId: attemptId, status: "pending", duplicate: false };
+  } finally {
+    lock.releaseLock();
   }
-  const previous = dbGet_("submissions/" + actor.uid) || {};
-  const maxAttempts = Math.max(1, Number(exam.maxAttempts || 1));
-  const usedAttempts = Object.keys(previous).filter(function(id) {
-    return previous[id] && previous[id].examId === examId;
-  }).length;
-  if (usedAttempts >= maxAttempts) throw apiError_("ATTEMPT_LIMIT", "Bạn đã sử dụng hết số lượt làm bài.");
-  const submission = {
-    uid: actor.uid, examId: examId, attemptId: attemptId,
-    answers: payload.answers, submittedAt: now,
-    status: "pending", score: null, feedback: "", gradedBy: null, gradedAt: null
-  };
-  dbPut_(path, submission);
   audit_(actor.uid, "submit_attempt", attemptId);
-  return { attemptId: attemptId, status: "pending", duplicate: false };
+  return result;
 }
 
 function myHistory_(actor) {
