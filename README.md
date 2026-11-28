@@ -1,66 +1,100 @@
-# HTA Ck
+# HTVA Ck
 
-**HTA Ck** là ứng dụng Android riêng tư giúp chủ sở hữu sắp xếp và ghi nhớ những thông tin, kế hoạch và kỷ niệm liên quan đến mối quan hệ của mình.
+HTVA Ck là ứng dụng Android hỗ trợ tổ chức bài kiểm tra, học sinh làm bài và nộp bài, giáo viên nhận bài và chấm điểm.
 
-- **Tên ứng dụng:** HTA Ck
-- **Android application ID:** com.htanh.appck
-- **Ứng dụng liên quan:** HTAVk
-- **Application ID của HTAVk:** com.htanh.appvk
+- **Android application ID:** `com.htanh.appck`
+- **Nền tảng Android:** Native Java + XML
+- **Lớp xử lý trung gian:** Google Apps Script Web App
+- **Cơ sở dữ liệu:** Firebase Realtime Database
+- **Firebase Authentication:** Không sử dụng
+- **Dự án Backend riêng:** Không có; Google Apps Script là lớp xử lý server-side được phê duyệt.
 
-> HTA Ck và HTAVk là hai ứng dụng riêng biệt. Không dùng nhầm application ID của ứng dụng này cho ứng dụng kia. Việc tích hợp hoặc chia sẻ dữ liệu giữa hai ứng dụng chưa được mặc định cho phép.
+HTAVk là ứng dụng riêng biệt (`com.htanh.appvk`). Không tự ý tích hợp hoặc dùng chung dữ liệu với HTAVk.
 
-## Định hướng sản phẩm
+## Luồng hệ thống đã phê duyệt
 
-HTA Ck hướng đến việc quản lý thông tin một cách tích cực, tôn trọng và có trách nhiệm, ví dụ:
+```
+HTVA Ck Android -> Google Apps Script -> Firebase Realtime Database
+```
 
-- Ngày kỷ niệm, ngày quan trọng và lời nhắc.
-- Kế hoạch chung, ý tưởng hẹn hò và hoạt động.
-- Ghi chú về sở thích hoặc những điều đối phương tự nguyện chia sẻ.
-- Những khoảnh khắc và kỷ niệm đáng nhớ.
+Android chỉ gọi Apps Script qua HTTPS. Android không được truy cập Firebase trực tiếp và không chứa service-account key, Firebase Admin credential, database secret hay password pepper. Apps Script xác thực tài khoản HTVA, phát hành session ngắn hạn, kiểm tra vai trò/quyền sở hữu và thao tác Firebase bằng danh tính thực thi server-side.
 
-Các mục trên là định hướng sản phẩm, **không phải cam kết rằng những tính năng này đã được triển khai**. Hãy kiểm tra source code trước khi mô tả một tính năng là đã hoạt động.
+## Chức năng trong milestone hiện tại
 
-## Quyền riêng tư và sự đồng thuận
+- Đăng nhập tài khoản HTVA với vai trò `student` hoặc `teacher`.
+- Học sinh xem bài kiểm tra đã xuất bản, làm câu hỏi trắc nghiệm/tự luận và nộp bài.
+- Học sinh xem lịch sử nộp bài, trạng thái chấm, điểm và nhận xét.
+- Giáo viên xem bài nộp thuộc bài kiểm tra được phân công và lưu điểm/nhận xét.
+- Server gắn bài nộp với UID từ session; không tin UID do Android gửi lên.
+- Retry cùng `attemptId` không tạo bản ghi trùng; giới hạn số lượt theo `maxAttempts`.
 
-- Mặc định dữ liệu là riêng tư; chỉ thu thập dữ liệu thực sự cần thiết.
-- Phân biệt rõ dữ liệu do chủ ứng dụng tự nhập với dữ liệu được đối phương chủ động chia sẻ.
-- Không xây dựng tính năng theo dõi vị trí bí mật, đọc trộm tin nhắn, ghi âm/ghi hình ẩn, truy cập tài khoản trái phép hoặc giám sát không có sự đồng thuận.
-- Mọi cơ chế chia sẻ với HTAVk trong tương lai phải minh bạch, có sự đồng ý rõ ràng và có thể thu hồi.
-- Không thêm backend, cloud, analytics, Firebase, Supabase hoặc SDK bên thứ ba khi chưa có quyết định kiến trúc rõ ràng.
+Đây là milestone nền tảng. Chưa có giao diện tạo đề/ quản lý tài khoản, hàng đợi nộp offline bền vững, đính kèm tệp, khôi phục tài khoản hoặc kiểm thử tải production.
 
-## Trạng thái kỹ thuật hiện tại
+## Android build
 
-Repository hiện là một Android Native starter project:
+Yêu cầu cấu hình URL Web App của Google Apps Script trong Gradle property cục bộ:
 
-- Java và Android XML.
-- Gradle Groovy DSL.
-- Android Gradle Plugin 7.2.2.
-- compileSdk 32, minSdk 21, targetSdk 32.
-- Các dependency hiện có gồm AndroidX AppCompat, Material Components và ConstraintLayout.
+```properties
+HTVA_API_BASE_URL=https://script.google.com/macros/s/DEPLOYMENT_ID/exec
+```
 
-Giao diện/source hiện tại vẫn có nguồn gốc từ ứng dụng BMI mẫu. Việc đổi tên package và nhãn ứng dụng không đồng nghĩa với việc các màn hình nghiệp vụ HTA Ck đã được xây dựng.
+Có thể đặt trong `~/.gradle/gradle.properties` trên máy build. Không commit URL môi trường thật vào repository.
 
-### Build
-
-Nếu repository có Gradle wrapper:
+Build:
 
 ```bash
 ./gradlew :app:assembleDebug
 ```
 
-Chạy unit tests:
+Unit tests:
 
 ```bash
 ./gradlew :app:test
 ```
 
-Nếu wrapper không có trong repository, mở project bằng Android Studio và dùng Gradle được cấu hình tại máy.
+## Cấu hình Google Apps Script và Firebase
 
-## Hướng dẫn cho AI coding agent
+Xem [HTVA Exam Backend Architecture](docs/architecture/HTVA_EXAM_BACKEND_ARCHITECTURE.md) và mã tại `backend/apps-script/`.
 
-Trước khi sửa code, đọc:
+Các Script Properties bắt buộc:
+- `FIREBASE_DATABASE_URL`: URL Realtime Database.
+- `HTVA_PASSWORD_PEPPER`: chuỗi ngẫu nhiên bí mật tối thiểu 32 ký tự. Chỉ lưu trong Script Properties, tuyệt đối không commit.
 
-- [AGENTS.md](AGENTS.md) — quy trình và quy tắc làm việc trong repository.
-- [Relationship App Skill](.agents/skills/relationship-app/SKILL.md) — nguyên tắc sản phẩm, quyền riêng tư và hướng dẫn kỹ thuật chuyên biệt.
+Apps Script cần được liên kết với Google Cloud project của Firebase, bật Realtime Database API, có OAuth scope `https://www.googleapis.com/auth/firebase.database`, và execution identity cần quyền IAM phù hợp. Firebase Rules phải chặn truy cập trực tiếp từ client. Xác minh kết nối IAM thực tế trước khi triển khai cho học sinh.
 
-Ưu tiên thay đổi nhỏ, có thể kiểm chứng; giữ Java/XML hiện có và không tự ý thay đổi kiến trúc lớn.
+## Tài khoản và đề kiểm tra
+
+Tạo tài khoản bằng hàm `provisionAccount(username, password, role, displayName)` trong Apps Script editor. Vai trò chỉ nhận `student` hoặc `teacher`.
+
+Tạo đề bằng `provisionExam(examId, title, description, teacherUidsJson, questionsJson, startAtMs, endAtMs, maxAttempts)`. `teacherUidsJson` và `questionsJson` là JSON array; thời gian là Unix epoch milliseconds (0 nếu không giới hạn). UID giáo viên được lấy từ kết quả `provisionAccount`.
+
+Ví dụ cấu trúc câu hỏi:
+
+```json
+[
+  {
+    "questionId": "q1",
+    "prompt": "Thủ đô của Việt Nam là gì?",
+    "options": [
+      {"label": "Hà Nội", "value": "hanoi"},
+      {"label": "Huế", "value": "hue"}
+    ]
+  },
+  {
+    "questionId": "q2",
+    "prompt": "Giải thích ngắn gọn...",
+    "type": "essay"
+  }
+]
+```
+
+Nếu không có `options`, ứng dụng hiển thị ô nhập câu trả lời tự luận. Chấm điểm hiện là thủ công.
+
+## Engineering baseline
+
+- Android Gradle Plugin 7.2.2, Gradle wrapper 7.3.3.
+- compileSdk 32, minSdk 21, targetSdk 32.
+- Java 8, XML layouts, Gradle Groovy DSL.
+- Giữ nguyên applicationId `com.htanh.appck`; không đổi nhầm thành applicationId của HTAVk.
+
+Không tuyên bố build/test thành công nếu chưa chạy và quan sát kết quả thực tế.
