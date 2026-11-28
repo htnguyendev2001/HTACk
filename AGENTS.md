@@ -54,8 +54,8 @@
 
 - Keep Apps Script source under `backend/apps-script/`.
 - Keep Firebase data below the `htva/` root.
-- Store `FIREBASE_DATABASE_URL` and `HTVA_PASSWORD_PEPPER` only in Apps Script Script Properties.
-- Use OAuth scopes and IAM for Apps Script server-side Firebase access; do not make database rules public as a workaround.
+- Store `FIREBASE_DATABASE_URL`, `FIREBASE_SERVICE_ACCOUNT_EMAIL`, `FIREBASE_SERVICE_ACCOUNT_PRIVATE_KEY` and `HTVA_PASSWORD_PEPPER` only in Apps Script Script Properties.
+- Apps Script creates short-lived Firebase OAuth2 tokens from a service-account JWT; grant the service account the required Firebase Realtime Database IAM role. Never use public database rules as a workaround.
 - Keep user roles server-controlled. Account provisioning is an operator-only editor action.
 - Use deterministic attempt IDs for retry idempotency and enforce configured `maxAttempts`.
 - Apps Script quotas and CacheService eviction are known operational limits; disclose them.
