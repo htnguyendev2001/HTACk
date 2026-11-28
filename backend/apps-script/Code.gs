@@ -85,9 +85,19 @@ function stripSensitiveExamFields_(value) {
 }
 
 function submitAttempt_(deviceId, payload) {
-  enforceSubmissionRateLimit_(deviceId);
   const examId = safeId_(payload.examId, "examId");
   const attemptId = safeId_(payload.attemptId, "attemptId");
+  const path = "submissions/" + deviceId + "/" + attemptId;
+
+  // A retry after a lost response must return the original result without consuming another rate-limit slot.
+  const existingBeforeLimit = dbGet_(path);
+  if (existingBeforeLimit) {
+    if (existingBeforeLimit.examId !== examId) {
+      throw apiError_("ATTEMPT_CONFLICT", "Mã lượt làm bài đã được sử dụng.");
+    }
+    return { attemptId: attemptId, status: existingBeforeLimit.status || "pending", duplicate: true };
+  }
+  enforceSubmissionRateLimit_(deviceId);
   if (!payload.answers || typeof payload.answers !== "object" || Array.isArray(payload.answers)) {
     throw apiError_("INVALID_PAYLOAD", "Câu trả lời không hợp lệ.");
   }
@@ -100,17 +110,16 @@ function submitAttempt_(deviceId, payload) {
   const questionIds = {};
   (exam.questions || []).forEach(function(question) { questionIds[String(question.questionId)] = true; });
   const answerIds = Object.keys(payload.answers);
-  if (answerIds.length === 0 || answerIds.length > Object.keys(questionIds).length ||
+  if (answerIds.length !== Object.keys(questionIds).length ||
       answerIds.some(function(id) { return !questionIds[id]; }) ||
       JSON.stringify(payload.answers).length > 50000 ||
       answerIds.some(function(id) {
         const value = payload.answers[id];
-        return typeof value !== "string" || value.length > 5000;
+        return typeof value !== "string" || value.trim().length === 0 || value.length > 5000;
       })) {
     throw apiError_("INVALID_ANSWERS", "Câu trả lời không hợp lệ hoặc vượt quá giới hạn.");
   }
 
-  const path = "submissions/" + deviceId + "/" + attemptId;
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   let result;
