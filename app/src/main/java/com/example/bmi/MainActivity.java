@@ -193,8 +193,9 @@ public class MainActivity extends AppCompatActivity {
         } catch (JSONException e) {
             savedDraft = new JSONObject();
         }
-        String attemptId = savedDraft.optString("attemptId", "");
-        if (attemptId.isEmpty()) attemptId = UUID.randomUUID().toString().replace("-", "");
+        String existingAttemptId = savedDraft.optString("attemptId", "");
+        final String attemptId = existingAttemptId.isEmpty()
+                ? UUID.randomUUID().toString().replace("-", "") : existingAttemptId;
         JSONObject savedAnswers = savedDraft.optJSONObject("answers");
 
         for (int i = 0; i < questions.length(); i++) {
