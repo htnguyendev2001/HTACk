@@ -29,11 +29,11 @@ function doPost(e) {
         data = myHistory_(deviceId);
         break;
       case "teacherSubmissions":
-        requireTeacherCode_(payload);
+        requireTeacherCode_(payload, deviceId);
         data = teacherSubmissions_();
         break;
       case "gradeSubmission":
-        requireTeacherCode_(payload);
+        requireTeacherCode_(payload, deviceId);
         data = gradeSubmission_(payload);
         break;
       default:
