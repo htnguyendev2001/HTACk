@@ -167,7 +167,7 @@ function submitAttempt_(actor, payload) {
     }).length;
     if (usedAttempts >= maxAttempts) throw apiError_("ATTEMPT_LIMIT", "Bạn đã sử dụng hết số lượt làm bài.");
     const submission = {
-      uid: actor.uid, examId: examId, attemptId: attemptId,
+      uid: actor.uid, examId: examId, examTitle: exam.title || examId, attemptId: attemptId,
       answers: payload.answers, submittedAt: now,
       status: "pending", score: null, feedback: "", gradedBy: null, gradedAt: null
     };
@@ -186,8 +186,8 @@ function myHistory_(actor) {
   const history = Object.keys(items).map(function(id) {
     const item = items[id] || {};
     return {
-      attemptId: id, examId: item.examId, submittedAt: item.submittedAt,
-      status: item.status, score: item.score, feedback: item.feedback || ""
+      attemptId: id, examId: item.examId, examTitle: item.examTitle || item.examId,
+      submittedAt: item.submittedAt, status: item.status, score: item.score, feedback: item.feedback || ""
     };
   }).sort(function(a, b) { return Number(b.submittedAt || 0) - Number(a.submittedAt || 0); }).slice(0, 100);
   return { items: history };
@@ -211,7 +211,7 @@ function teacherSubmissions_(actor, payload) {
       if (allowed[item.examId]) {
         result.push({
           studentUid: uid, studentName: users[uid].displayName || "",
-          attemptId: attemptId, examId: item.examId,
+          attemptId: attemptId, examId: item.examId, examTitle: item.examTitle || exams[item.examId].title || item.examId,
           submittedAt: item.submittedAt, status: item.status,
           score: item.score, answers: item.answers,
           questions: exams[item.examId].questions || []
