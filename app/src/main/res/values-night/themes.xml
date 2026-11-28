@@ -1,16 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
     <style name="Theme.BMI" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
-        <!-- Primary brand color. -->
-        <item name="colorPrimary">@color/purple_200</item>
-        <item name="colorPrimaryVariant">@color/purple_700</item>
-        <item name="colorOnPrimary">@color/black</item>
-        <!-- Secondary brand color. -->
-        <item name="colorSecondary">@color/teal_200</item>
-        <item name="colorSecondaryVariant">@color/teal_200</item>
-        <item name="colorOnSecondary">@color/black</item>
-        <!-- Status bar color. -->
-        <item name="android:statusBarColor" tools:targetApi="l">?attr/colorPrimaryVariant</item>
-        <!-- Customize your theme here. -->
+        <item name="colorPrimary">#FFFFB77A</item>
+        <item name="colorPrimaryVariant">#FFF28A3A</item>
+        <item name="colorOnPrimary">#FF43252A</item>
+        <item name="colorSecondary">#FFFFA0B4</item>
+        <item name="colorSecondaryVariant">#FFE85D83</item>
+        <item name="colorOnSecondary">#FF43252A</item>
+        <item name="colorAccent">#FFFFA0B4</item>
+        <item name="android:colorAccent">#FFFFA0B4</item>
+        <item name="android:windowBackground">#FF241A1B</item>
+        <item name="android:statusBarColor">#FF241A1B</item>
+        <item name="android:navigationBarColor">#FF241A1B</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>

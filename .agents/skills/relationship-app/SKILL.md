@@ -1,46 +1,97 @@
 ---
-name: htva-exam-app
-description: Project-specific guidance for HTVA Ck exam delivery, student submissions, teacher grading, Apps Script and Firebase security.
+name: relationship-app
+description: Project-specific guidance for designing and implementing HTVA Ck, a privacy-first Android relationship-organizing app. Use for product planning, Android implementation, personal-data handling, reminders, and any proposed HTVA Vk integration.
 ---
 
-# HTVA Ck — Exam App Skill
+# HTVA Ck — Relationship App Skill
 
-## Product identity
+## 1. Identity
 
-HTVA Ck is the Android application for students to take exams and submit answers, and for teachers to receive and grade those submissions. Android applicationId: `com.htanh.appck`. HTAVk (`com.htanh.appvk`) is separate.
+- App: **HTVA Ck**
+- Application ID: **com.htanh.appck**
+- Related, separate app: **HTVA Vk**
+- HTVA Vk application ID: **com.htanh.appvk**
 
-## Approved architecture
+These identifiers are not interchangeable. Do not assume an integration exists.
 
-Android -> Google Apps Script Web App -> Firebase Realtime Database.
+## 2. Product framing
 
-There is no separate Backend project. Firebase Authentication is not used. Google Apps Script is the trusted server-side boundary. Do not add Firebase Auth or create a separate backend without a new explicit architecture decision.
+Design HTVA Ck as a respectful personal organizer for relationship-related information. Suitable directions include:
 
-## Identity and authorization
+- Important dates and reminders.
+- Shared plans, activities and date ideas.
+- Personal notes about preferences or details voluntarily shared.
+- Memories and meaningful moments.
 
-- App accounts are provisioned by an authorized operator in Apps Script.
-- Roles are server-managed: `student` and `teacher`.
-- Server derives user UID and role from a valid session.
-- Students can only submit as themselves and read their own history.
-- Teachers can only inspect/grade exams assigned to them.
-- Validate all authorization and business rules server-side.
+Use neutral, respectful language. The app helps its owner organize their own plans and memories; it must not frame another person as property or as someone to control. Treat feature ideas as proposals until verified in source code.
 
-## Secrets and data
+## 3. Consent and privacy by design
 
-- Never place Firebase Admin credentials, service-account keys, database secrets, password pepper, session tokens or account passwords in Android or source control.
-- Keep Firebase access server-side using a service-account JWT exchanged for a short-lived OAuth2 token. Store the service-account private key only in Apps Script Script Properties and grant the service account the required Firebase Realtime Database IAM role.
-- Firebase client rules deny direct reads and writes.
-- Keep data under Firebase root `htva/`.
-- Do not log passwords, tokens or full answer payloads.
-- Use HTTPS only.
+- Private by default; least data necessary.
+- Clearly label information entered by the app owner versus information voluntarily shared by the partner.
+- Never create covert tracking, hidden surveillance, message interception, unauthorized account access, hidden recording or permission bypass.
+- Do not infer consent from a relationship, device ownership or access to a shared device.
+- Make any sharing explicit, understandable, limited in scope and revocable.
+- Avoid exposing sensitive notes in notification previews, logs, screenshots used for diagnostics, analytics or crash reporting.
 
-## Android conventions
+## 4. Data lifecycle
 
-Use Java, XML and the current Gradle Groovy DSL. Preserve the current toolchain unless explicitly approved. Avoid blind package renames. Handle loading, empty, error and network failure states.
+When a feature stores personal information, specify:
 
-## Current scope boundaries
+1. What data is collected and why.
+2. Who enters it and who can access it.
+3. Where it is stored and whether it leaves the device.
+4. How it is protected in storage and transit.
+5. How long it is retained.
+6. How the owner can export or delete it.
+7. Whether another person has consented to any sharing.
 
-Manual teacher grading is supported. Do not claim automatic grading, offline durable submission queue, attachment upload, account recovery, exam authoring UI, anti-cheating/proctoring or production readiness unless these are implemented and verified.
+Do not introduce a database, cloud service, backend, analytics, Firebase, Supabase or third-party SDK without an explicit architecture decision.
 
-## Definition of done
+## 5. Android engineering context
 
-A feature is done only when implementation, authorization checks, failure handling, tests/build validation and documentation are reviewed. Report any validation that could not be run.
+The existing codebase is Android Native Java with XML layouts and Gradle Groovy DSL.
+
+- Follow existing Java/XML conventions for incremental implementation.
+- Do not migrate to Kotlin or Compose without an explicit request or approved plan.
+- Inspect the actual Gradle/AGP version before using newer Android APIs or build syntax.
+- Keep applicationId, Gradle namespace, manifest package and Java/Kotlin package declarations conceptually separate.
+- Avoid global package replacement. Trace imports, activity declarations, generated resources and source paths before a package migration.
+- Request only runtime permissions that a clearly defined feature needs.
+
+## 6. HTVA Vk integration
+
+Any future HTVA Ck ↔ HTVA Vk integration is a separate design decision. Before implementation, define:
+
+- The user value and exact data being shared.
+- Explicit opt-in and revocation behavior.
+- Identity/authentication and authorization boundaries.
+- Transport/API or platform handoff contract.
+- Data minimization, retention and deletion semantics.
+- Failure handling and user-visible sync state.
+
+Do not assume shared credentials, shared storage, common backend, automatic device discovery or silent background transfer.
+
+## 7. Feature design checklist
+
+Before implementing a feature, answer:
+
+- Does it solve a clear organizer/reminder/memory use case?
+- Is the information provided voluntarily and collected minimally?
+- Is the UI transparent about what is stored and shared?
+- Can the owner correct or delete the information?
+- Does it avoid surveillance, coercion and unnecessary permissions?
+- Does it fit the existing Java/XML project without an unjustified migration?
+- Are loading, empty, error, permission-denied and offline states considered where relevant?
+- Can the behavior be tested?
+
+## 8. Definition of done
+
+A change is complete only when:
+
+- The agreed behavior is implemented, not merely documented.
+- Existing conventions and unrelated code are preserved.
+- Relevant tests/build checks were run and their actual results reported.
+- No secrets or unnecessary personal data are exposed.
+- Documentation reflects the implementation accurately.
+- Any remaining limitations or unimplemented ideas are clearly stated.
