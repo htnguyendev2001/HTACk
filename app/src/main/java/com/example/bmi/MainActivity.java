@@ -231,6 +231,7 @@ public class MainActivity extends AppCompatActivity {
         root.removeAllViews();
         addText("Khu vực giáo viên", 22, true);
         addText("Bài học sinh đã nộp", 18, true);
+        addButton("Làm mới danh sách").setOnClickListener(v -> loadTeacherInbox());
         TextView status = addText("Đang tải bài nộp...", 14, false);
         api.request("teacherSubmissions", sessionToken, new JSONObject(), new HtvaApiClient.Callback() {
             @Override public void onSuccess(JSONObject data) {
