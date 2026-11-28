@@ -10,7 +10,9 @@ const DB_ROOT = "htva";
 
 function doPost(e) {
   try {
-    const request = JSON.parse((e && e.postData && e.postData.contents) || "{}");
+    const rawBody = (e && e.postData && e.postData.contents) || "{}";
+    if (rawBody.length > 200000) throw apiError_("PAYLOAD_TOO_LARGE", "Dữ liệu gửi lên vượt quá giới hạn.");
+    const request = JSON.parse(rawBody);
     const action = String(request.action || "");
     const payload = request.payload || {};
     if (action === "login") return json_(login_(payload));
@@ -80,13 +82,33 @@ function requireSession_(token) {
   return JSON.parse(raw);
 }
 
+function sanitizeExamForStudent_(exam) {
+  const safeExam = JSON.parse(JSON.stringify(exam));
+  ["answerKey", "correctAnswers", "solutions", "gradingRubric"].forEach(function(key) {
+    delete safeExam[key];
+  });
+  (safeExam.questions || []).forEach(function(question) {
+    ["answer", "correctAnswer", "answerKey", "expectedAnswer", "solution", "explanation", "gradingRubric"].forEach(function(key) {
+      delete question[key];
+    });
+    (question.options || []).forEach(function(option) {
+      if (option && typeof option === "object") {
+        delete option.correct;
+        delete option.isCorrect;
+      }
+    });
+  });
+  return safeExam;
+}
+
 function listExams_(actor) {
   const all = dbGet_("exams") || {};
   const items = Object.keys(all).map(function(id) {
     const exam = all[id] || {};
     if (exam.status !== "published") return null;
     if (actor.role === "teacher" && (exam.teacherIds || []).indexOf(actor.uid) < 0) return null;
-    return Object.assign({ examId: id }, exam);
+    const visibleExam = actor.role === "student" ? sanitizeExamForStudent_(exam) : exam;
+    return Object.assign({ examId: id }, visibleExam);
   }).filter(Boolean);
   return { items: items };
 }
@@ -107,8 +129,13 @@ function submitAttempt_(actor, payload) {
   (exam.questions || []).forEach(function(question) { questionIds[String(question.questionId)] = true; });
   const answerIds = Object.keys(payload.answers);
   if (answerIds.length === 0 || answerIds.length > Object.keys(questionIds).length ||
-      answerIds.some(function(id) { return !questionIds[id]; })) {
-    throw apiError_("INVALID_ANSWERS", "Câu trả lời không khớp với cấu trúc đề kiểm tra.");
+      answerIds.some(function(id) { return !questionIds[id]; }) ||
+      JSON.stringify(payload.answers).length > 50000 ||
+      answerIds.some(function(id) {
+        const value = payload.answers[id];
+        return typeof value !== "string" || value.length > 5000;
+      })) {
+    throw apiError_("INVALID_ANSWERS", "Câu trả lời không hợp lệ hoặc vượt quá giới hạn.");
   }
 
   const path = "submissions/" + actor.uid + "/" + attemptId;
@@ -142,7 +169,7 @@ function myHistory_(actor) {
       attemptId: id, examId: item.examId, submittedAt: item.submittedAt,
       status: item.status, score: item.score, feedback: item.feedback || ""
     };
-  }).sort(function(a, b) { return Number(b.submittedAt || 0) - Number(a.submittedAt || 0); });
+  }).sort(function(a, b) { return Number(b.submittedAt || 0) - Number(a.submittedAt || 0); }).slice(0, 100);
   return { items: history };
 }
 
@@ -171,8 +198,8 @@ function teacherSubmissions_(actor, payload) {
       }
     });
   });
-  result.sort(function(a, b) { return Number(a.submittedAt || 0) - Number(b.submittedAt || 0); });
-  return { items: result };
+  result.sort(function(a, b) { return Number(b.submittedAt || 0) - Number(a.submittedAt || 0); });
+  return { items: result.slice(0, 100) };
 }
 
 function gradeSubmission_(actor, payload) {
@@ -290,9 +317,15 @@ function verifyPassword_(password, salt, expected) {
 function enforceLoginRateLimit_(username) {
   const cache = CacheService.getScriptCache();
   const key = "loginfail:" + username;
-  const count = Number(cache.get(key) || 0);
-  if (count >= 8) throw apiError_("RATE_LIMITED", "Bạn đăng nhập quá nhiều lần. Hãy thử lại sau.");
-  cache.put(key, String(count + 1), 900);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(3000);
+  try {
+    const count = Number(cache.get(key) || 0);
+    if (count >= 8) throw apiError_("RATE_LIMITED", "Bạn đăng nhập quá nhiều lần. Hãy thử lại sau.");
+    cache.put(key, String(count + 1), 900);
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function normalizeUsername_(value) {
