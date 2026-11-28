@@ -97,7 +97,6 @@ function submitAttempt_(deviceId, payload) {
     }
     return { attemptId: attemptId, status: existingBeforeLimit.status || "pending", duplicate: true };
   }
-  enforceSubmissionRateLimit_(deviceId);
   if (!payload.answers || typeof payload.answers !== "object" || Array.isArray(payload.answers)) {
     throw apiError_("INVALID_PAYLOAD", "Câu trả lời không hợp lệ.");
   }
@@ -119,6 +118,7 @@ function submitAttempt_(deviceId, payload) {
       })) {
     throw apiError_("INVALID_ANSWERS", "Câu trả lời không hợp lệ hoặc vượt quá giới hạn.");
   }
+  enforceSubmissionRateLimit_(deviceId);
 
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
