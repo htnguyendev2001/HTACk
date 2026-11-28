@@ -251,7 +251,16 @@ public class MainActivity extends AppCompatActivity {
         addText(item.optString("studentName", "Học sinh") + " • " + item.optString("examId"), 17, true);
         addText("Mã lượt: " + item.optString("attemptId"), 12, false);
         JSONObject answers = item.optJSONObject("answers");
-        if (answers != null) {
+        JSONArray questions = item.optJSONArray("questions");
+        if (questions != null && answers != null) {
+            for (int i = 0; i < questions.length(); i++) {
+                JSONObject question = questions.optJSONObject(i);
+                if (question == null) continue;
+                String questionId = question.optString("questionId", "");
+                addText("Câu hỏi: " + question.optString("prompt", ""), 14, true);
+                addText("Trả lời: " + answers.optString(questionId, "(chưa trả lời)"), 14, false);
+            }
+        } else if (answers != null) {
             try { addText("Câu trả lời: " + answers.toString(2), 13, false); }
             catch (JSONException ignored) { addText("Câu trả lời đã nhận.", 13, false); }
         }
