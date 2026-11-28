@@ -317,11 +317,57 @@ function audit_(uid, action, targetId) {
 function dbGet_(path) { return firebaseRequest_(path, "get"); }
 function dbPut_(path, value) { return firebaseRequest_(path, "put", value); }
 
+function getFirebaseAccessToken_() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get("firebase:oauth");
+  if (cached) return cached;
+
+  const props = PropertiesService.getScriptProperties();
+  const serviceEmail = props.getProperty("FIREBASE_SERVICE_ACCOUNT_EMAIL");
+  const privateKey = String(props.getProperty("FIREBASE_SERVICE_ACCOUNT_PRIVATE_KEY") || "").replace(/\\n/g, "\n");
+  if (!serviceEmail || !privateKey) {
+    throw new Error("Set FIREBASE_SERVICE_ACCOUNT_EMAIL and FIREBASE_SERVICE_ACCOUNT_PRIVATE_KEY Script Properties.");
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const header = base64Url_(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const claims = base64Url_(JSON.stringify({
+    iss: serviceEmail,
+    scope: "https://www.googleapis.com/auth/firebase.database https://www.googleapis.com/auth/userinfo.email",
+    aud: "https://oauth2.googleapis.com/token",
+    iat: now,
+    exp: now + 3600
+  }));
+  const unsignedJwt = header + "." + claims;
+  const signature = Utilities.computeRsaSha256Signature(unsignedJwt, privateKey);
+  const assertion = unsignedJwt + "." + base64Url_(signature);
+
+  const response = UrlFetchApp.fetch("https://oauth2.googleapis.com/token", {
+    method: "post",
+    payload: {
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion: assertion
+    },
+    muteHttpExceptions: true
+  });
+  if (response.getResponseCode() !== 200) {
+    throw new Error("Unable to obtain Firebase service token.");
+  }
+  const tokenData = JSON.parse(response.getContentText());
+  if (!tokenData.access_token) throw new Error("Firebase OAuth response did not contain an access token.");
+  cache.put("firebase:oauth", tokenData.access_token, 3300);
+  return tokenData.access_token;
+}
+
+function base64Url_(value) {
+  return Utilities.base64EncodeWebSafe(value).replace(/=+$/g, "");
+}
+
 function firebaseRequest_(path, method, value) {
   const props = PropertiesService.getScriptProperties();
   const baseUrl = props.getProperty("FIREBASE_DATABASE_URL");
   if (!baseUrl) throw new Error("Missing FIREBASE_DATABASE_URL Script Property.");
-  const token = ScriptApp.getOAuthToken();
+  const token = getFirebaseAccessToken_();
   const url = baseUrl.replace(/\/$/, "") + "/" + DB_ROOT + "/" + path + ".json";
   const options = {
     method: method, contentType: "application/json", muteHttpExceptions: true,
