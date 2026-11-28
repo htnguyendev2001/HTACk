@@ -122,7 +122,6 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onError(String code, String message) {
                 examStatus.setText(message);
-                addStudentHistorySection();
             }
         });
 
