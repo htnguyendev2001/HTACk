@@ -66,6 +66,7 @@ function login_(payload) {
     throw apiError_("INVALID_CREDENTIALS", "Tên đăng nhập hoặc mật khẩu không đúng.");
   }
   const token = Utilities.getUuid().replace(/-/g, "") + Utilities.getUuid().replace(/-/g, "");
+  CacheService.getScriptCache().remove("loginfail:" + username);
   const sessionUser = { uid: user.uid, role: user.role, displayName: user.displayName || "" };
   CacheService.getScriptCache().put("session:" + token, JSON.stringify(sessionUser), SESSION_TTL_SECONDS);
   audit_(sessionUser.uid, "login", user.uid);
@@ -81,12 +82,13 @@ function requireSession_(token) {
 
 function listExams_(actor) {
   const all = dbGet_("exams") || {};
-  return Object.keys(all).map(function(id) {
+  const items = Object.keys(all).map(function(id) {
     const exam = all[id] || {};
     if (exam.status !== "published") return null;
     if (actor.role === "teacher" && (exam.teacherIds || []).indexOf(actor.uid) < 0) return null;
     return Object.assign({ examId: id }, exam);
   }).filter(Boolean);
+  return { items: items };
 }
 
 function submitAttempt_(actor, payload) {
@@ -108,6 +110,12 @@ function submitAttempt_(actor, payload) {
     if (existing.examId !== examId) throw apiError_("ATTEMPT_CONFLICT", "Mã lượt làm bài đã được sử dụng.");
     return { attemptId: attemptId, status: existing.status || "submitted", duplicate: true };
   }
+  const previous = dbGet_("submissions/" + actor.uid) || {};
+  const maxAttempts = Math.max(1, Number(exam.maxAttempts || 1));
+  const usedAttempts = Object.keys(previous).filter(function(id) {
+    return previous[id] && previous[id].examId === examId;
+  }).length;
+  if (usedAttempts >= maxAttempts) throw apiError_("ATTEMPT_LIMIT", "Bạn đã sử dụng hết số lượt làm bài.");
   const submission = {
     uid: actor.uid, examId: examId, attemptId: attemptId,
     answers: payload.answers, submittedAt: now,
@@ -121,13 +129,14 @@ function submitAttempt_(actor, payload) {
 function myHistory_(actor) {
   requireRole_(actor, "student");
   const items = dbGet_("submissions/" + actor.uid) || {};
-  return Object.keys(items).map(function(id) {
+  const history = Object.keys(items).map(function(id) {
     const item = items[id] || {};
     return {
       attemptId: id, examId: item.examId, submittedAt: item.submittedAt,
       status: item.status, score: item.score, feedback: item.feedback || ""
     };
   }).sort(function(a, b) { return Number(b.submittedAt || 0) - Number(a.submittedAt || 0); });
+  return { items: history };
 }
 
 function teacherSubmissions_(actor, payload) {
@@ -154,7 +163,8 @@ function teacherSubmissions_(actor, payload) {
       }
     });
   });
-  return result.sort(function(a, b) { return Number(a.submittedAt || 0) - Number(b.submittedAt || 0); });
+  result.sort(function(a, b) { return Number(a.submittedAt || 0) - Number(b.submittedAt || 0); });
+  return { items: result };
 }
 
 function gradeSubmission_(actor, payload) {
@@ -199,6 +209,50 @@ function provisionAccount(username, password, role, displayName) {
   dbPut_("users/" + uid, user);
   dbPut_(indexPath, user);
   return { uid: uid, username: normalized, role: role };
+}
+
+/**
+ * Run manually in the Apps Script editor to create/update an exam.
+ * teacherUidsJson and questionsJson must be valid JSON arrays.
+ * startAtMs/endAtMs are Unix epoch milliseconds; pass 0 for no boundary.
+ */
+function provisionExam(examId, title, description, teacherUidsJson, questionsJson, startAtMs, endAtMs, maxAttempts) {
+  const id = safeId_(examId, "examId");
+  const teacherIds = JSON.parse(teacherUidsJson || "[]");
+  const questions = JSON.parse(questionsJson || "[]");
+  if (!Array.isArray(teacherIds) || teacherIds.length === 0) throw new Error("Assign at least one teacher UID.");
+  if (!Array.isArray(questions) || questions.length === 0) throw new Error("An exam needs at least one question.");
+  teacherIds.forEach(function(uid) {
+    const teacher = dbGet_("users/" + safeId_(uid, "teacherUid"));
+    if (!teacher || teacher.role !== "teacher" || teacher.active !== true) throw new Error("Invalid or inactive teacher UID: " + uid);
+  });
+  questions.forEach(function(question, index) {
+    if (!question.questionId || !question.prompt) throw new Error("Question " + index + " needs questionId and prompt.");
+  });
+  const exam = {
+    title: String(title || "").slice(0, 200),
+    description: String(description || "").slice(0, 2000),
+    teacherIds: teacherIds,
+    questions: questions,
+    startAt: Number(startAtMs || 0),
+    endAt: Number(endAtMs || 0),
+    maxAttempts: Math.max(1, Number(maxAttempts || 1)),
+    status: "published",
+    updatedAt: Date.now()
+  };
+  if (!exam.title) throw new Error("Exam title is required.");
+  dbPut_("exams/" + id, exam);
+  return { examId: id, status: exam.status, teacherIds: teacherIds };
+}
+
+function disableAccount(username) {
+  const normalized = normalizeUsername_(username);
+  const user = dbGet_("users/byUsername/" + normalized);
+  if (!user) throw new Error("Account not found.");
+  user.active = false;
+  dbPut_("users/" + user.uid, user);
+  dbPut_("users/byUsername/" + normalized, user);
+  return { uid: user.uid, active: false };
 }
 
 function passwordHash_(password, salt) {
