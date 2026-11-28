@@ -276,23 +276,41 @@ function provisionExam(examId, title, description, teacherUidsJson, questionsJso
   const id = safeId_(examId, "examId");
   const teacherIds = JSON.parse(teacherUidsJson || "[]");
   const questions = JSON.parse(questionsJson || "[]");
-  if (!Array.isArray(teacherIds) || teacherIds.length === 0) throw new Error("Assign at least one teacher UID.");
-  if (!Array.isArray(questions) || questions.length === 0) throw new Error("An exam needs at least one question.");
+  if (!Array.isArray(teacherIds) || teacherIds.length === 0 || teacherIds.length > 20) throw new Error("Assign between 1 and 20 teacher UIDs.");
+  if (!Array.isArray(questions) || questions.length === 0 || questions.length > 100) throw new Error("An exam needs between 1 and 100 questions.");
+  const maxAttemptCount = Number(maxAttempts || 1);
+  const startTime = Number(startAtMs || 0);
+  const endTime = Number(endAtMs || 0);
+  if (!isFinite(maxAttemptCount) || Math.floor(maxAttemptCount) !== maxAttemptCount || maxAttemptCount < 1 || maxAttemptCount > 10) {
+    throw new Error("maxAttempts must be an integer from 1 to 10.");
+  }
+  if (!isFinite(startTime) || !isFinite(endTime) || (startTime > 0 && endTime > 0 && endTime <= startTime)) {
+    throw new Error("Invalid exam start/end time.");
+  }
   teacherIds.forEach(function(uid) {
     const teacher = dbGet_("users/" + safeId_(uid, "teacherUid"));
     if (!teacher || teacher.role !== "teacher" || teacher.active !== true) throw new Error("Invalid or inactive teacher UID: " + uid);
   });
+  const seenQuestionIds = {};
   questions.forEach(function(question, index) {
-    if (!question.questionId || !question.prompt) throw new Error("Question " + index + " needs questionId and prompt.");
+    if (!question.questionId || !/^[A-Za-z0-9_-]{1,80}$/.test(String(question.questionId)) ||
+        !question.prompt || String(question.prompt).length > 5000) {
+      throw new Error("Question " + index + " needs a valid questionId and prompt.");
+    }
+    if (seenQuestionIds[question.questionId]) throw new Error("Duplicate questionId: " + question.questionId);
+    seenQuestionIds[question.questionId] = true;
+    if (question.options && (!Array.isArray(question.options) || question.options.length > 20)) {
+      throw new Error("Question options must be an array with at most 20 items.");
+    }
   });
   const exam = {
     title: String(title || "").slice(0, 200),
     description: String(description || "").slice(0, 2000),
     teacherIds: teacherIds,
     questions: questions,
-    startAt: Number(startAtMs || 0),
-    endAt: Number(endAtMs || 0),
-    maxAttempts: Math.max(1, Number(maxAttempts || 1)),
+    startAt: startTime,
+    endAt: endTime,
+    maxAttempts: maxAttemptCount,
     status: "published",
     updatedAt: Date.now()
   };
@@ -433,6 +451,12 @@ function firebaseRequest_(path, method, value) {
   if (status < 200 || status >= 300) throw new Error("Firebase request failed with HTTP " + status);
   const text = response.getContentText();
   return text ? JSON.parse(text) : null;
+}
+
+function testFirebaseConnection() {
+  const token = getFirebaseAccessToken_();
+  const value = dbGet_("meta/connectionTest");
+  return { ok: true, tokenObtained: !!token, connectionTestValue: value };
 }
 
 function apiError_(code, message) {
