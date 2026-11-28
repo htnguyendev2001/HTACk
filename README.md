@@ -95,8 +95,9 @@ Nếu không có `options`, ứng dụng hiển thị ô nhập câu trả lời
 ## Engineering baseline
 
 - Android Gradle Plugin 7.2.2, Gradle wrapper 7.3.3.
-- compileSdk 32, minSdk 21, targetSdk 32.
-- Java 8, XML layouts, Gradle Groovy DSL.
+- Gradle runtime JDK: 17 (Java 25 is not supported by Gradle 7.3.3).
+- App source compatibility: Java 8; compileSdk 32, minSdk 21, targetSdk 32.
+- XML layouts, Gradle Groovy DSL.
 - Giữ nguyên applicationId `com.htanh.appck`; không đổi nhầm thành applicationId của HTAVk.
 
 Không tuyên bố build/test thành công nếu chưa chạy và quan sát kết quả thực tế.
