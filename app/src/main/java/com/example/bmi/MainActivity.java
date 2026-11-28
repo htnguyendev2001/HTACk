@@ -51,7 +51,7 @@ public class MainActivity extends AppCompatActivity {
     private void showHome() {
         root.removeAllViews();
         addText("HTVA Ck", 28, true);
-        addText("Không cần tài khoản. Bài kiểm tra và dữ liệu được chia sẻ giữa các thiết bị.", 15, false);
+        addText("Không cần tài khoản. Đề kiểm tra và bài nộp được đồng bộ giữa các thiết bị.", 15, false);
         addButton("Bài kiểm tra / Học sinh").setOnClickListener(v -> loadStudentHome());
         addButton("Khu vực giáo viên").setOnClickListener(v -> promptTeacherAccessCode());
     }
