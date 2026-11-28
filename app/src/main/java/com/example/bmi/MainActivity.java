@@ -5,7 +5,10 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import android.os.Bundle;
 import android.text.InputType;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.View;
+import android.content.SharedPreferences;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -22,6 +25,9 @@ import org.json.JSONObject;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 import java.util.UUID;
 
 public class MainActivity extends AppCompatActivity {
@@ -91,6 +97,7 @@ public class MainActivity extends AppCompatActivity {
         root.removeAllViews();
         addText("Bài kiểm tra", 23, true);
         addButton("Làm mới danh sách").setOnClickListener(v -> loadStudentHome());
+        addButton("Lịch sử nộp bài").setOnClickListener(v -> loadStudentHistory());
         TextView examStatus = addText("Đang tải danh sách...", 14, false);
 
         api.request("listExams", new JSONObject(), new HtvaApiClient.Callback() {
@@ -110,7 +117,6 @@ public class MainActivity extends AppCompatActivity {
                         addDivider();
                     }
                 }
-                addStudentHistorySection();
             }
 
             @Override
@@ -123,36 +129,46 @@ public class MainActivity extends AppCompatActivity {
         addButton("Trang chủ").setOnClickListener(v -> showHome());
     }
 
-    private void addStudentHistorySection() {
-        addText("Lịch sử nộp bài trên thiết bị này", 19, true);
+    private void loadStudentHistory() {
+        root.removeAllViews();
+        addText("Lịch sử nộp bài", 23, true);
+        addText("Lịch sử được lưu trên máy chủ và gắn với thiết bị này.", 14, false);
+        addButton("Làm mới lịch sử").setOnClickListener(v -> loadStudentHistory());
         TextView historyStatus = addText("Đang tải lịch sử...", 14, false);
+
         api.request("myHistory", new JSONObject(), new HtvaApiClient.Callback() {
             @Override
             public void onSuccess(JSONObject data) {
                 historyStatus.setText("");
                 JSONArray items = data.optJSONArray("items");
                 if (items == null || items.length() == 0) {
-                    addText("Thiết bị này chưa có bài nộp nào.", 14, false);
-                } else {
-                    for (int i = 0; i < items.length(); i++) {
-                        JSONObject item = items.optJSONObject(i);
-                        if (item == null) continue;
-                        String state = "graded".equals(item.optString("status")) ? "Đã chấm" : "Chờ chấm";
-                        String score = item.isNull("score") ? "" : " • Điểm: " + item.optString("score");
-                        addText(item.optString("examTitle", item.optString("examId")) +
-                                " • " + state + score, 14, false);
-                        if (!item.optString("feedback", "").isEmpty()) {
-                            addText("Nhận xét: " + item.optString("feedback"), 13, false);
-                        }
+                    addText("Thiết bị này chưa có bài nộp nào.", 15, false);
+                    return;
+                }
+                SimpleDateFormat dateFormat = new SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault());
+                for (int i = 0; i < items.length(); i++) {
+                    JSONObject item = items.optJSONObject(i);
+                    if (item == null) continue;
+                    String state = "graded".equals(item.optString("status")) ? "Đã chấm" : "Đang chờ chấm";
+                    long submittedAt = item.optLong("submittedAt", 0L);
+                    String date = submittedAt > 0 ? dateFormat.format(new Date(submittedAt)) : "Không rõ thời gian";
+                    addText(item.optString("examTitle", item.optString("examId")), 17, true);
+                    addText("Thời gian nộp: " + date, 13, false);
+                    addText("Trạng thái: " + state, 14, false);
+                    if (!item.isNull("score")) addText("Điểm: " + item.optString("score"), 15, true);
+                    if (!item.optString("feedback", "").isEmpty()) {
+                        addText("Nhận xét: " + item.optString("feedback"), 14, false);
                     }
+                    addDivider();
                 }
             }
 
             @Override
             public void onError(String code, String message) {
-                historyStatus.setText(message);
+                historyStatus.setText("Không tải được lịch sử: " + message);
             }
         });
+        addButton("Quay lại danh sách bài kiểm tra").setOnClickListener(v -> loadStudentHome());
     }
 
     private void showExam(JSONObject exam) {
@@ -168,6 +184,18 @@ public class MainActivity extends AppCompatActivity {
             addButton("Quay lại").setOnClickListener(v -> loadStudentHome());
             return;
         }
+
+        SharedPreferences draftPrefs = getSharedPreferences("htva_exam_drafts", MODE_PRIVATE);
+        String draftKey = "draft_" + examId;
+        JSONObject savedDraft;
+        try {
+            savedDraft = new JSONObject(draftPrefs.getString(draftKey, "{}"));
+        } catch (JSONException e) {
+            savedDraft = new JSONObject();
+        }
+        String attemptId = savedDraft.optString("attemptId", "");
+        if (attemptId.isEmpty()) attemptId = UUID.randomUUID().toString().replace("-", "");
+        JSONObject savedAnswers = savedDraft.optJSONObject("answers");
 
         for (int i = 0; i < questions.length(); i++) {
             JSONObject question = questions.optJSONObject(i);
@@ -190,71 +218,111 @@ public class MainActivity extends AppCompatActivity {
                     radio.setText(label);
                     radio.setTag(value);
                     group.addView(radio);
+                    if (savedAnswers != null && value.equals(savedAnswers.optString(questionId))) {
+                        group.check(radio.getId());
+                    }
                 }
                 root.addView(group);
                 answerViews.put(questionId, group);
+                group.setOnCheckedChangeListener((radioGroup, checkedId) ->
+                        saveExamDraft(draftPrefs, draftKey, attemptId, answerViews));
             } else {
-                answerViews.put(questionId, addInput("Nhập câu trả lời", false, false));
+                EditText input = addInput("Nhập câu trả lời", false, false);
+                if (savedAnswers != null) input.setText(savedAnswers.optString(questionId, ""));
+                answerViews.put(questionId, input);
+                input.addTextChangedListener(new TextWatcher() {
+                    @Override public void beforeTextChanged(CharSequence value, int start, int count, int after) { }
+                    @Override public void onTextChanged(CharSequence value, int start, int before, int count) {
+                        saveExamDraft(draftPrefs, draftKey, attemptId, answerViews);
+                    }
+                    @Override public void afterTextChanged(Editable value) { }
+                });
             }
         }
 
+        saveExamDraft(draftPrefs, draftKey, attemptId, answerViews);
         Button submit = addButton("Nộp bài");
         TextView status = addText("", 14, false);
-        String attemptId = UUID.randomUUID().toString().replace("-", "");
-        JSONObject[] pendingPayload = new JSONObject[1];
+        final String stableAttemptId = attemptId;
 
         submit.setOnClickListener(v -> {
-            if (pendingPayload[0] == null) {
-                JSONObject answers = new JSONObject();
-                try {
-                    for (Map.Entry<String, View> entry : answerViews.entrySet()) {
-                        View view = entry.getValue();
-                        String answer = "";
-                        if (view instanceof EditText) {
-                            answer = ((EditText) view).getText().toString();
-                        } else if (view instanceof RadioGroup) {
-                            RadioGroup group = (RadioGroup) view;
-                            int checkedId = group.getCheckedRadioButtonId();
-                            RadioButton selected = checkedId == -1 ? null : group.findViewById(checkedId);
-                            if (selected != null) answer = String.valueOf(selected.getTag());
-                        }
-                        answers.put(entry.getKey(), answer);
-                    }
-                } catch (JSONException e) {
-                    status.setText("Không thể đóng gói câu trả lời.");
+            JSONObject answers = collectAnswers(answerViews);
+            if (answers == null) {
+                status.setText("Không thể đọc câu trả lời. Vui lòng kiểm tra lại.");
+                return;
+            }
+            for (String questionId : answers.keySet()) {
+                if (answers.optString(questionId).trim().isEmpty()) {
+                    status.setText("Vui lòng trả lời tất cả câu hỏi trước khi nộp bài.");
                     return;
                 }
-
-                JSONObject payload = new JSONObject();
-                try {
-                    payload.put("examId", examId);
-                    payload.put("attemptId", attemptId);
-                    payload.put("answers", answers);
-                } catch (JSONException e) {
-                    status.setText("Dữ liệu bài làm không hợp lệ.");
-                    return;
-                }
-                pendingPayload[0] = payload;
             }
 
+            JSONObject payload = new JSONObject();
+            try {
+                payload.put("examId", examId);
+                payload.put("attemptId", stableAttemptId);
+                payload.put("answers", answers);
+            } catch (JSONException e) {
+                status.setText("Dữ liệu bài làm không hợp lệ.");
+                return;
+            }
+            saveExamDraft(draftPrefs, draftKey, stableAttemptId, answerViews);
             submit.setEnabled(false);
             status.setText("Đang gửi bài...");
-            api.request("submitAttempt", pendingPayload[0], new HtvaApiClient.Callback() {
+            api.request("submitAttempt", payload, new HtvaApiClient.Callback() {
                 @Override
                 public void onSuccess(JSONObject data) {
+                    draftPrefs.edit().remove(draftKey).apply();
                     Toast.makeText(MainActivity.this, "Nộp bài thành công.", Toast.LENGTH_LONG).show();
-                    loadStudentHome();
+                    loadStudentHistory();
                 }
 
                 @Override
                 public void onError(String code, String message) {
                     submit.setEnabled(true);
-                    status.setText(message);
+                    status.setText(message + " Bài làm đã được giữ trên thiết bị; bạn có thể thử nộp lại.");
                 }
             });
         });
 
-        addButton("Quay lại").setOnClickListener(v -> loadStudentHome());
+        addButton("Lưu nháp và quay lại").setOnClickListener(v -> {
+            saveExamDraft(draftPrefs, draftKey, stableAttemptId, answerViews);
+            loadStudentHome();
+        });
+    }
+
+    private JSONObject collectAnswers(Map<String, View> answerViews) {
+        JSONObject answers = new JSONObject();
+        try {
+            for (Map.Entry<String, View> entry : answerViews.entrySet()) {
+                View view = entry.getValue();
+                String answer = "";
+                if (view instanceof EditText) {
+                    answer = ((EditText) view).getText().toString();
+                } else if (view instanceof RadioGroup) {
+                    RadioGroup group = (RadioGroup) view;
+                    int checkedId = group.getCheckedRadioButtonId();
+                    RadioButton selected = checkedId == -1 ? null : group.findViewById(checkedId);
+                    if (selected != null) answer = String.valueOf(selected.getTag());
+                }
+                answers.put(entry.getKey(), answer);
+            }
+            return answers;
+        } catch (JSONException e) {
+            return null;
+        }
+    }
+
+    private void saveExamDraft(SharedPreferences preferences, String key, String attemptId,
+                               Map<String, View> answerViews) {
+        JSONObject draft = new JSONObject();
+        JSONObject answers = collectAnswers(answerViews);
+        try {
+            draft.put("attemptId", attemptId);
+            draft.put("answers", answers == null ? new JSONObject() : answers);
+            preferences.edit().putString(key, draft.toString()).apply();
+        } catch (JSONException ignored) { }
     }
 
     private void loadTeacherInbox() {
