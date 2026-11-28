@@ -4,10 +4,12 @@ on:
   push:
     branches:
       - master
+      - main
       - "feat/**"
   pull_request:
     branches:
       - master
+      - main
 
 jobs:
   android:
@@ -19,7 +21,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "11"
+          java-version: "17"
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
       - name: Install Android SDK packages
