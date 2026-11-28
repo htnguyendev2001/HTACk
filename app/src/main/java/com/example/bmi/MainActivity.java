@@ -161,7 +161,7 @@ public class MainActivity extends AppCompatActivity {
                 }
                 root.addView(group);
                 answerViews.put(questionId, group);
-            } else answerViews.put(questionId, addInput("Nhập câu trả lời", false));
+            } else answerViews.put(questionId, addInput("Nhập câu trả lời", false, false));
         }
         Button submit = addButton("Nộp bài");
         TextView status = addText("", 14, false);
@@ -271,7 +271,7 @@ public class MainActivity extends AppCompatActivity {
         }
         EditText score = addInput("Điểm (0 - 100)", false);
         score.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
-        EditText feedback = addInput("Nhận xét của giáo viên", false);
+        EditText feedback = addInput("Nhận xét của giáo viên", false, false);
         Button grade = addButton("Lưu kết quả chấm");
         TextView result = addText("", 13, false);
         grade.setOnClickListener(v -> {
@@ -318,12 +318,17 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private EditText addInput(String hint, boolean password) {
+        return addInput(hint, password, true);
+    }
+
+    private EditText addInput(String hint, boolean password, boolean singleLine) {
         EditText input = new EditText(this);
-        input.setSingleLine(!password);
+        input.setSingleLine(singleLine);
         input.setHint(hint);
         input.setInputType(password
                 ? InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD
-                : InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+                : InputType.TYPE_CLASS_TEXT | (singleLine ? 0 : InputType.TYPE_TEXT_FLAG_MULTI_LINE));
+        if (!singleLine && !password) input.setMinLines(3);
         root.addView(input, new LinearLayout.LayoutParams(-1, -2));
         return input;
     }
