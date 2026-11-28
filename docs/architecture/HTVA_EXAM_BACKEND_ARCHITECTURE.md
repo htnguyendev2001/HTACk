@@ -12,7 +12,7 @@ Firebase Authentication is not used.
 
 ## Responsibilities
 
-- Android: sign-in UI, exam list/detail, answer composition, local draft, submit/retry, student history, teacher inbox and grading UI.
+- Android: sign-in UI, exam list/detail, answer composition, submit, student history, teacher inbox and grading UI.
 - Google Apps Script: authenticate app accounts, issue short-lived bearer sessions, authorize every action, validate payloads, write/read Firebase, and audit sensitive operations.
 - Firebase Realtime Database: durable records for users, exams, attempts/submissions, grades and audit events.
 - Apps Script CacheService: short-lived session cache and rate-limit counters only. Cache eviction means a user may need to sign in again; it is not durable storage.
@@ -27,9 +27,15 @@ Passwords are stored as salted PBKDF2-HMAC-SHA256 verifiers, never plaintext. Se
 
 ## Firebase access
 
-Only the Apps Script execution identity accesses Firebase. Configure the Apps Script project to use the same Google Cloud project as Firebase, enable the Realtime Database API, grant the script execution identity the minimum required Firebase Realtime Database IAM role, and add the `https://www.googleapis.com/auth/firebase.database` OAuth scope. Database Security Rules must deny client reads and writes; the Android app receives no database URL credentials or privileged Firebase token.
+Only Apps Script accesses Firebase. The script creates a short-lived Google OAuth2 access token from a service-account JWT, then calls the Realtime Database REST API using an Authorization Bearer header. This follows Firebase's documented server-to-server authentication method. The service-account email and private key are stored only in Apps Script Script Properties; they must never appear in source control or Android. Grant the service account the required Firebase Realtime Database IAM role. Database Security Rules deny direct client reads and writes.
 
-The script uses the Apps Script OAuth token server-side. Verify this IAM setup in the target Firebase project before production deployment. Do not fall back to public database rules or embed a database secret in Android.
+Required Script Properties:
+- `FIREBASE_DATABASE_URL`
+- `FIREBASE_SERVICE_ACCOUNT_EMAIL`
+- `FIREBASE_SERVICE_ACCOUNT_PRIVATE_KEY` (PEM; store newline characters as `\\n` if needed)
+- `HTVA_PASSWORD_PEPPER` (random secret, minimum 32 characters)
+
+The Apps Script manifest needs the `script.external_request` scope to call Google's token endpoint and Firebase REST API. Restrict Apps Script editor access because editors can access the server-side credentials. Verify the service-account IAM permissions before production deployment. Never fall back to public database rules or embed a database secret in Android.
 
 ## Core records
 
@@ -56,13 +62,14 @@ Grade payload: `{ studentUid, attemptId, score, feedback }`. The server verifies
 
 1. Create a standalone Apps Script project (not a separate backend service).
 2. Add `backend/apps-script/Code.gs` and `appsscript.json`.
-3. Set Script Properties: `FIREBASE_DATABASE_URL` and `HTVA_SESSION_TTL_SECONDS` (optional; default 21600).
-4. Link the Apps Script project to the Firebase Google Cloud project; enable Realtime Database API and grant the execution identity Firebase Realtime Database access.
-5. Set database rules to deny all direct client access.
+3. Create a service account in the Firebase Google Cloud project and grant it the required Realtime Database IAM role.
+4. Set Script Properties: `FIREBASE_DATABASE_URL`, `FIREBASE_SERVICE_ACCOUNT_EMAIL`, `FIREBASE_SERVICE_ACCOUNT_PRIVATE_KEY`, and `HTVA_PASSWORD_PEPPER`.
+5. Enable the Realtime Database API and set database rules to deny all direct client access.
 6. Deploy as Web App, execute as the owner, and restrict who can edit the Apps Script project. The web app endpoint is public-facing; all business actions must require a valid server session.
 7. Run `provisionAccount(username, password, role, displayName)` from the Apps Script editor for each teacher/student account. Never put provisioning passwords in source control.
-8. Set the deployed Web App URL in the local Android Gradle property `HTVA_API_BASE_URL`; do not commit a deployment URL if it is environment-specific.
-9. Verify the IAM token can read/write the Firebase database before enabling real student submissions.
+8. Run `provisionExam(...)` from the Apps Script editor to publish an exam and assign teacher UIDs.
+9. Set the deployed Web App URL in the local Android Gradle property `HTVA_API_BASE_URL`; do not commit a deployment URL if it is environment-specific.
+10. Verify service-account token creation and Firebase read/write access before enabling real student submissions.
 
 ## Known limitations before production
 
