@@ -1,12 +1,11 @@
 /**
- * HTVA Ck API — Google Apps Script Web App
- * Android -> Apps Script -> Firebase Realtime Database.
- * No Firebase Authentication. Never expose this script's OAuth token to clients.
+ * HTVA Ck API — anonymous shared-data mode.
+ * Android -> Google Apps Script -> Firebase Realtime Database.
+ * No end-user accounts or login sessions. Teacher grading is protected by a server-side access code.
  */
-
-const SESSION_TTL_SECONDS = 21600;
-const PBKDF2_ITERATIONS = 120000;
-const DB_ROOT = "htva";
+const DB_ROOT = "HTVAData";
+const MAX_SUBMISSIONS_PER_DEVICE_PER_WINDOW = 20;
+const SUBMISSION_RATE_WINDOW_SECONDS = 900;
 
 function doPost(e) {
   try {
@@ -15,30 +14,27 @@ function doPost(e) {
     const request = JSON.parse(rawBody);
     const action = String(request.action || "");
     const payload = request.payload || {};
-    if (action === "login") return json_(login_(payload));
     if (action === "health") return json_({ ok: true, data: { service: "htva-api", status: "ok" } });
 
-    const actor = requireSession_(request.token);
+    const deviceId = normalizeDeviceId_(request.deviceId);
     let data;
     switch (action) {
-      case "logout":
-        CacheService.getScriptCache().remove("session:" + request.token);
-        data = { loggedOut: true };
-        break;
       case "listExams":
-        data = listExams_(actor);
+        data = listExams_();
         break;
       case "submitAttempt":
-        data = submitAttempt_(actor, payload);
+        data = submitAttempt_(deviceId, payload);
         break;
       case "myHistory":
-        data = myHistory_(actor);
+        data = myHistory_(deviceId);
         break;
       case "teacherSubmissions":
-        data = teacherSubmissions_(actor, payload);
+        requireTeacherCode_(payload);
+        data = teacherSubmissions_();
         break;
       case "gradeSubmission":
-        data = gradeSubmission_(actor, payload);
+        requireTeacherCode_(payload);
+        data = gradeSubmission_(payload);
         break;
       default:
         throw apiError_("UNKNOWN_ACTION", "Yêu cầu không được hỗ trợ.");
@@ -56,37 +52,14 @@ function doPost(e) {
   }
 }
 
-function login_(payload) {
-  const username = normalizeUsername_(payload.username);
-  const password = String(payload.password || "");
-  if (!username || password.length < 1 || password.length > 256) {
-    throw apiError_("INVALID_CREDENTIALS", "Tên đăng nhập hoặc mật khẩu không hợp lệ.");
-  }
-  enforceLoginRateLimit_(username);
-  const user = dbGet_("users/byUsername/" + username);
-  if (!user || user.active !== true || !verifyPassword_(password, user.passwordSalt, user.passwordHash)) {
-    throw apiError_("INVALID_CREDENTIALS", "Tên đăng nhập hoặc mật khẩu không đúng.");
-  }
-  const token = Utilities.getUuid().replace(/-/g, "") + Utilities.getUuid().replace(/-/g, "");
-  CacheService.getScriptCache().remove("loginfail:" + username);
-  const sessionUser = { uid: user.uid, role: user.role, displayName: user.displayName || "" };
-  CacheService.getScriptCache().put("session:" + token, JSON.stringify(sessionUser), SESSION_TTL_SECONDS);
-  audit_(sessionUser.uid, "login", user.uid);
-  return { token: token, expiresIn: SESSION_TTL_SECONDS, user: sessionUser };
-}
-
-function requireSession_(token) {
-  if (!token || String(token).length < 32) throw apiError_("UNAUTHORIZED", "Phiên đăng nhập không hợp lệ.");
-  const cache = CacheService.getScriptCache();
-  const raw = cache.get("session:" + token);
-  if (!raw) throw apiError_("SESSION_EXPIRED", "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
-  const session = JSON.parse(raw);
-  const user = dbGet_("users/" + safeId_(session.uid, "uid"));
-  if (!user || user.active !== true || user.role !== session.role) {
-    cache.remove("session:" + token);
-    throw apiError_("SESSION_REVOKED", "Tài khoản đã bị khóa hoặc thay đổi quyền. Vui lòng đăng nhập lại.");
-  }
-  return { uid: user.uid, role: user.role, displayName: user.displayName || "" };
+function listExams_() {
+  const all = dbGet_("exams") || {};
+  const items = Object.keys(all).map(function(id) {
+    const exam = all[id] || {};
+    if (exam.status !== "published") return null;
+    return Object.assign({ examId: id }, sanitizeExamForStudent_(exam));
+  }).filter(Boolean);
+  return { items: items };
 }
 
 function sanitizeExamForStudent_(exam) {
@@ -97,18 +70,9 @@ function sanitizeExamForStudent_(exam) {
 
 function stripSensitiveExamFields_(value) {
   const blocked = {
-    answer: true,
-    correct: true,
-    iscorrect: true,
-    correctanswer: true,
-    answerkey: true,
-    expectedanswer: true,
-    solution: true,
-    solutions: true,
-    explanation: true,
-    gradingrubric: true,
-    correctanswers: true,
-    teacherids: true
+    answer: true, correct: true, iscorrect: true, correctanswer: true,
+    answerkey: true, expectedanswer: true, solution: true, solutions: true,
+    explanation: true, gradingrubric: true, correctanswers: true, teacherids: true
   };
   if (Array.isArray(value)) {
     value.forEach(stripSensitiveExamFields_);
@@ -120,20 +84,8 @@ function stripSensitiveExamFields_(value) {
   }
 }
 
-function listExams_(actor) {
-  const all = dbGet_("exams") || {};
-  const items = Object.keys(all).map(function(id) {
-    const exam = all[id] || {};
-    if (exam.status !== "published") return null;
-    if (actor.role === "teacher" && (exam.teacherIds || []).indexOf(actor.uid) < 0) return null;
-    const visibleExam = actor.role === "student" ? sanitizeExamForStudent_(exam) : exam;
-    return Object.assign({ examId: id }, visibleExam);
-  }).filter(Boolean);
-  return { items: items };
-}
-
-function submitAttempt_(actor, payload) {
-  requireRole_(actor, "student");
+function submitAttempt_(deviceId, payload) {
+  enforceSubmissionRateLimit_(deviceId);
   const examId = safeId_(payload.examId, "examId");
   const attemptId = safeId_(payload.attemptId, "attemptId");
   if (!payload.answers || typeof payload.answers !== "object" || Array.isArray(payload.answers)) {
@@ -144,6 +96,7 @@ function submitAttempt_(actor, payload) {
   const now = Date.now();
   if (exam.startAt && now < Number(exam.startAt)) throw apiError_("EXAM_NOT_STARTED", "Bài kiểm tra chưa bắt đầu.");
   if (exam.endAt && now > Number(exam.endAt)) throw apiError_("EXAM_CLOSED", "Bài kiểm tra đã kết thúc.");
+
   const questionIds = {};
   (exam.questions || []).forEach(function(question) { questionIds[String(question.questionId)] = true; });
   const answerIds = Object.keys(payload.answers);
@@ -157,7 +110,7 @@ function submitAttempt_(actor, payload) {
     throw apiError_("INVALID_ANSWERS", "Câu trả lời không hợp lệ hoặc vượt quá giới hạn.");
   }
 
-  const path = "submissions/" + actor.uid + "/" + attemptId;
+  const path = "submissions/" + deviceId + "/" + attemptId;
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   let result;
@@ -165,139 +118,120 @@ function submitAttempt_(actor, payload) {
     const existing = dbGet_(path);
     if (existing) {
       if (existing.examId !== examId) throw apiError_("ATTEMPT_CONFLICT", "Mã lượt làm bài đã được sử dụng.");
-      return { attemptId: attemptId, status: existing.status || "submitted", duplicate: true };
+      return { attemptId: attemptId, status: existing.status || "pending", duplicate: true };
     }
-    const previous = dbGet_("submissions/" + actor.uid) || {};
+    const previous = dbGet_("submissions/" + deviceId) || {};
     const maxAttempts = Math.max(1, Number(exam.maxAttempts || 1));
     const usedAttempts = Object.keys(previous).filter(function(id) {
       return previous[id] && previous[id].examId === examId;
     }).length;
     if (usedAttempts >= maxAttempts) throw apiError_("ATTEMPT_LIMIT", "Bạn đã sử dụng hết số lượt làm bài.");
     const submission = {
-      uid: actor.uid, examId: examId, examTitle: exam.title || examId, attemptId: attemptId,
-      answers: payload.answers, submittedAt: now,
-      status: "pending", score: null, feedback: "", gradedBy: null, gradedAt: null
+      deviceId: deviceId,
+      examId: examId,
+      examTitle: exam.title || examId,
+      attemptId: attemptId,
+      answers: payload.answers,
+      submittedAt: now,
+      status: "pending",
+      score: null,
+      feedback: "",
+      gradedAt: null
     };
     dbPut_(path, submission);
     result = { attemptId: attemptId, status: "pending", duplicate: false };
   } finally {
     lock.releaseLock();
   }
-  audit_(actor.uid, "submit_attempt", attemptId);
+  audit_(deviceId, "submit_attempt", attemptId);
   return result;
 }
 
-function myHistory_(actor) {
-  requireRole_(actor, "student");
-  const items = dbGet_("submissions/" + actor.uid) || {};
+function myHistory_(deviceId) {
+  const items = dbGet_("submissions/" + deviceId) || {};
   const history = Object.keys(items).map(function(id) {
     const item = items[id] || {};
     return {
-      attemptId: id, examId: item.examId, examTitle: item.examTitle || item.examId,
-      submittedAt: item.submittedAt, status: item.status, score: item.score, feedback: item.feedback || ""
+      attemptId: id,
+      examId: item.examId,
+      examTitle: item.examTitle || item.examId,
+      submittedAt: item.submittedAt,
+      status: item.status,
+      score: item.score,
+      feedback: item.feedback || ""
     };
-  }).sort(function(a, b) { return Number(b.submittedAt || 0) - Number(a.submittedAt || 0); }).slice(0, 100);
+  }).sort(function(a, b) {
+    return Number(b.submittedAt || 0) - Number(a.submittedAt || 0);
+  }).slice(0, 100);
   return { items: history };
 }
 
-function teacherSubmissions_(actor, payload) {
-  requireRole_(actor, "teacher");
-  const examId = payload.examId ? safeId_(payload.examId, "examId") : "";
+function teacherSubmissions_() {
+  const all = dbGet_("submissions") || {};
   const exams = dbGet_("exams") || {};
-  const allowed = {};
-  Object.keys(exams).forEach(function(id) {
-    if ((!examId || id === examId) && (exams[id].teacherIds || []).indexOf(actor.uid) >= 0) allowed[id] = true;
-  });
-  const users = dbGet_("users") || {};
   const result = [];
-  Object.keys(users).forEach(function(uid) {
-    if (uid === "byUsername") return;
-    const submissions = dbGet_("submissions/" + uid) || {};
+  Object.keys(all).forEach(function(deviceId) {
+    const submissions = all[deviceId] || {};
     Object.keys(submissions).forEach(function(attemptId) {
       const item = submissions[attemptId] || {};
-      if (allowed[item.examId]) {
-        result.push({
-          studentUid: uid, studentName: users[uid].displayName || "",
-          attemptId: attemptId, examId: item.examId, examTitle: item.examTitle || exams[item.examId].title || item.examId,
-          submittedAt: item.submittedAt, status: item.status,
-          score: item.score, answers: item.answers,
-          questions: exams[item.examId].questions || []
-        });
-      }
+      const exam = exams[item.examId] || {};
+      result.push({
+        studentUid: deviceId,
+        studentName: "Thiết bị " + deviceId.slice(0, 8),
+        attemptId: attemptId,
+        examId: item.examId,
+        examTitle: item.examTitle || exam.title || item.examId,
+        submittedAt: item.submittedAt,
+        status: item.status,
+        score: item.score,
+        answers: item.answers || {},
+        questions: exam.questions || []
+      });
     });
   });
-  result.sort(function(a, b) { return Number(b.submittedAt || 0) - Number(a.submittedAt || 0); });
-  return { items: result.slice(0, 100) };
+  result.sort(function(a, b) {
+    return Number(b.submittedAt || 0) - Number(a.submittedAt || 0);
+  });
+  return { items: result.slice(0, 200) };
 }
 
-function gradeSubmission_(actor, payload) {
-  requireRole_(actor, "teacher");
-  const studentUid = safeId_(payload.studentUid, "studentUid");
+function gradeSubmission_(payload) {
+  const deviceId = normalizeDeviceId_(payload.studentUid);
   const attemptId = safeId_(payload.attemptId, "attemptId");
   const score = Number(payload.score);
   const feedback = String(payload.feedback || "").slice(0, 4000);
-  if (!isFinite(score) || score < 0 || score > 100) throw apiError_("INVALID_SCORE", "Điểm phải nằm trong khoảng 0 đến 100.");
-  const path = "submissions/" + studentUid + "/" + attemptId;
+  if (!isFinite(score) || score < 0 || score > 100) {
+    throw apiError_("INVALID_SCORE", "Điểm phải nằm trong khoảng 0 đến 100.");
+  }
+  const path = "submissions/" + deviceId + "/" + attemptId;
   const submission = dbGet_(path);
   if (!submission) throw apiError_("NOT_FOUND", "Không tìm thấy bài nộp.");
-  const exam = dbGet_("exams/" + submission.examId);
-  if (!exam || (exam.teacherIds || []).indexOf(actor.uid) < 0) {
-    throw apiError_("FORBIDDEN", "Bạn không được phân công chấm bài này.");
-  }
   submission.status = "graded";
   submission.score = score;
   submission.feedback = feedback;
-  submission.gradedBy = actor.uid;
   submission.gradedAt = Date.now();
   dbPut_(path, submission);
-  audit_(actor.uid, "grade_submission", attemptId);
+  audit_(deviceId, "grade_submission", attemptId);
   return { attemptId: attemptId, status: "graded", score: score };
 }
 
-function provisionAccount(username, password, role, displayName) {
-  const normalized = normalizeUsername_(username);
-  if (!normalized || !password || String(password).length < 12) {
-    throw new Error("Username required; password must be at least 12 characters.");
-  }
-  if (role !== "student" && role !== "teacher") throw new Error("Role must be student or teacher.");
-  const indexPath = "users/byUsername/" + normalized;
-  if (dbGet_(indexPath)) throw new Error("Username already exists.");
-  const uid = Utilities.getUuid().replace(/-/g, "");
-  const salt = Utilities.getUuid() + Utilities.getUuid();
-  const user = {
-    uid: uid, username: normalized, displayName: String(displayName || "").slice(0, 120),
-    role: role, active: true, passwordSalt: salt, passwordHash: passwordHash_(password, salt),
-    createdAt: Date.now()
-  };
-  dbPut_("users/" + uid, user);
-  dbPut_(indexPath, user);
-  return { uid: uid, username: normalized, role: role };
-}
-
-/**
- * Run manually in the Apps Script editor to create/update an exam.
- * teacherUidsJson and questionsJson must be valid JSON arrays.
- * startAtMs/endAtMs are Unix epoch milliseconds; pass 0 for no boundary.
- */
-function provisionExam(examId, title, description, teacherUidsJson, questionsJson, startAtMs, endAtMs, maxAttempts) {
+function provisionExam(examId, title, description, questionsJson, startAtMs, endAtMs, maxAttempts) {
   const id = safeId_(examId, "examId");
-  const teacherIds = JSON.parse(teacherUidsJson || "[]");
   const questions = JSON.parse(questionsJson || "[]");
-  if (!Array.isArray(teacherIds) || teacherIds.length === 0 || teacherIds.length > 20) throw new Error("Assign between 1 and 20 teacher UIDs.");
-  if (!Array.isArray(questions) || questions.length === 0 || questions.length > 100) throw new Error("An exam needs between 1 and 100 questions.");
+  if (!Array.isArray(questions) || questions.length === 0 || questions.length > 100) {
+    throw new Error("An exam needs between 1 and 100 questions.");
+  }
   const maxAttemptCount = Number(maxAttempts || 1);
   const startTime = Number(startAtMs || 0);
   const endTime = Number(endAtMs || 0);
-  if (!isFinite(maxAttemptCount) || Math.floor(maxAttemptCount) !== maxAttemptCount || maxAttemptCount < 1 || maxAttemptCount > 10) {
+  if (!isFinite(maxAttemptCount) || Math.floor(maxAttemptCount) !== maxAttemptCount ||
+      maxAttemptCount < 1 || maxAttemptCount > 10) {
     throw new Error("maxAttempts must be an integer from 1 to 10.");
   }
-  if (!isFinite(startTime) || !isFinite(endTime) || (startTime > 0 && endTime > 0 && endTime <= startTime)) {
+  if (!isFinite(startTime) || !isFinite(endTime) ||
+      (startTime > 0 && endTime > 0 && endTime <= startTime)) {
     throw new Error("Invalid exam start/end time.");
   }
-  teacherIds.forEach(function(uid) {
-    const teacher = dbGet_("users/" + safeId_(uid, "teacherUid"));
-    if (!teacher || teacher.role !== "teacher" || teacher.active !== true) throw new Error("Invalid or inactive teacher UID: " + uid);
-  });
   const seenQuestionIds = {};
   questions.forEach(function(question, index) {
     if (!question.questionId || !/^[A-Za-z0-9_-]{1,80}$/.test(String(question.questionId)) ||
@@ -313,7 +247,6 @@ function provisionExam(examId, title, description, teacherUidsJson, questionsJso
   const exam = {
     title: String(title || "").slice(0, 200),
     description: String(description || "").slice(0, 2000),
-    teacherIds: teacherIds,
     questions: questions,
     startAt: startTime,
     endAt: endTime,
@@ -323,78 +256,74 @@ function provisionExam(examId, title, description, teacherUidsJson, questionsJso
   };
   if (!exam.title) throw new Error("Exam title is required.");
   dbPut_("exams/" + id, exam);
-  return { examId: id, status: exam.status, teacherIds: teacherIds };
+  return { examId: id, status: exam.status };
 }
 
-function disableAccount(username) {
-  const normalized = normalizeUsername_(username);
-  const user = dbGet_("users/byUsername/" + normalized);
-  if (!user) throw new Error("Account not found.");
-  user.active = false;
-  dbPut_("users/" + user.uid, user);
-  dbPut_("users/byUsername/" + normalized, user);
-  return { uid: user.uid, active: false };
-}
-
-function passwordHash_(password, salt) {
-  const pepper = PropertiesService.getScriptProperties().getProperty("HTVA_PASSWORD_PEPPER");
-  if (!pepper || pepper.length < 32) throw new Error("Set a random HTVA_PASSWORD_PEPPER Script Property (at least 32 characters).");
-  const key = Utilities.newBlob(String(password) + pepper).getBytes();
-  const saltBytes = Utilities.newBlob(String(salt)).getBytes();
-  let block = saltBytes.concat([0, 0, 0, 1]);
-  let u = Utilities.computeHmacSha256Signature(block, key);
-  let t = u.slice();
-  for (let i = 1; i < PBKDF2_ITERATIONS; i++) {
-    u = Utilities.computeHmacSha256Signature(u, key);
-    for (let j = 0; j < t.length; j++) t[j] = (t[j] ^ u[j]);
+function normalizeDeviceId_(value) {
+  const id = String(value || "");
+  if (!/^[A-Za-z0-9_-]{16,80}$/.test(id)) {
+    throw apiError_("INVALID_DEVICE_ID", "Mã thiết bị không hợp lệ. Hãy khởi động lại ứng dụng.");
   }
-  return bytesToHex_(t);
+  return id;
 }
 
-function verifyPassword_(password, salt, expected) {
-  if (!salt || !expected) return false;
-  const actual = passwordHash_(password, salt);
-  if (actual.length !== expected.length) return false;
-  let diff = 0;
-  for (let i = 0; i < actual.length; i++) diff |= actual.charCodeAt(i) ^ expected.charCodeAt(i);
-  return diff === 0;
-}
-
-function enforceLoginRateLimit_(username) {
+function enforceSubmissionRateLimit_(deviceId) {
   const cache = CacheService.getScriptCache();
-  const key = "loginfail:" + username;
+  const key = "submit:" + deviceId;
   const lock = LockService.getScriptLock();
   lock.waitLock(3000);
   try {
     const count = Number(cache.get(key) || 0);
-    if (count >= 8) throw apiError_("RATE_LIMITED", "Bạn đăng nhập quá nhiều lần. Hãy thử lại sau.");
-    cache.put(key, String(count + 1), 900);
+    if (count >= MAX_SUBMISSIONS_PER_DEVICE_PER_WINDOW) {
+      throw apiError_("RATE_LIMITED", "Thiết bị đã gửi quá nhiều bài. Vui lòng thử lại sau.");
+    }
+    cache.put(key, String(count + 1), SUBMISSION_RATE_WINDOW_SECONDS);
   } finally {
     lock.releaseLock();
   }
 }
 
-function normalizeUsername_(value) {
-  return String(value || "").trim().toLowerCase().replace(/[^a-z0-9._-]/g, "").slice(0, 64);
+function requireTeacherCode_(payload) {
+  const expected = PropertiesService.getScriptProperties().getProperty("HTVA_TEACHER_ACCESS_CODE");
+  const supplied = String(payload.accessCode || "");
+  if (!expected || expected.length < 8) {
+    throw apiError_("TEACHER_NOT_CONFIGURED", "Chưa cấu hình mã truy cập giáo viên trên máy chủ.");
+  }
+  if (supplied.length !== expected.length) {
+    throw apiError_("TEACHER_ACCESS_DENIED", "Mã truy cập giáo viên không đúng.");
+  }
+  let diff = 0;
+  for (let i = 0; i < expected.length; i++) {
+    diff |= expected.charCodeAt(i) ^ supplied.charCodeAt(i);
+  }
+  if (diff !== 0) throw apiError_("TEACHER_ACCESS_DENIED", "Mã truy cập giáo viên không đúng.");
 }
 
 function safeId_(value, field) {
   const id = String(value || "");
-  if (!/^[A-Za-z0-9_-]{1,100}$/.test(id)) throw apiError_("INVALID_" + field.toUpperCase(), "Mã dữ liệu không hợp lệ.");
+  if (!/^[A-Za-z0-9_-]{1,100}$/.test(id)) {
+    throw apiError_("INVALID_" + field.toUpperCase(), "Mã dữ liệu không hợp lệ.");
+  }
   return id;
 }
 
-function requireRole_(actor, role) {
-  if (actor.role !== role) throw apiError_("FORBIDDEN", "Bạn không có quyền thực hiện thao tác này.");
-}
-
-function audit_(uid, action, targetId) {
+function audit_(deviceId, action, targetId) {
   const id = Utilities.getUuid().replace(/-/g, "");
-  dbPut_("audit/" + id, { uid: uid, action: action, targetId: String(targetId || ""), at: Date.now() });
+  dbPut_("audit/" + id, {
+    deviceId: deviceId,
+    action: action,
+    targetId: String(targetId || ""),
+    at: Date.now()
+  });
 }
 
-function dbGet_(path) { return firebaseRequest_(path, "get"); }
-function dbPut_(path, value) { return firebaseRequest_(path, "put", value); }
+function dbGet_(path) {
+  return firebaseRequest_(path, "get");
+}
+
+function dbPut_(path, value) {
+  return firebaseRequest_(path, "put", value);
+}
 
 function getFirebaseAccessToken_() {
   const cache = CacheService.getScriptCache();
@@ -403,7 +332,8 @@ function getFirebaseAccessToken_() {
 
   const props = PropertiesService.getScriptProperties();
   const serviceEmail = props.getProperty("FIREBASE_SERVICE_ACCOUNT_EMAIL");
-  const privateKey = String(props.getProperty("FIREBASE_SERVICE_ACCOUNT_PRIVATE_KEY") || "").replace(/\\n/g, "\n");
+  const privateKey = String(props.getProperty("FIREBASE_SERVICE_ACCOUNT_PRIVATE_KEY") || "")
+      .replace(/\\n/g, "\n");
   if (!serviceEmail || !privateKey) {
     throw new Error("Set FIREBASE_SERVICE_ACCOUNT_EMAIL and FIREBASE_SERVICE_ACCOUNT_PRIVATE_KEY Script Properties.");
   }
@@ -420,7 +350,6 @@ function getFirebaseAccessToken_() {
   const unsignedJwt = header + "." + claims;
   const signature = Utilities.computeRsaSha256Signature(unsignedJwt, privateKey);
   const assertion = unsignedJwt + "." + base64Url_(signature);
-
   const response = UrlFetchApp.fetch("https://oauth2.googleapis.com/token", {
     method: "post",
     payload: {
@@ -443,13 +372,20 @@ function base64Url_(value) {
 }
 
 function firebaseRequest_(path, method, value) {
+  return firebaseRequestAtRoot_(DB_ROOT, path, method, value);
+}
+
+function firebaseRequestAtRoot_(root, path, method, value) {
   const props = PropertiesService.getScriptProperties();
   const baseUrl = props.getProperty("FIREBASE_DATABASE_URL");
   if (!baseUrl) throw new Error("Missing FIREBASE_DATABASE_URL Script Property.");
   const token = getFirebaseAccessToken_();
-  const url = baseUrl.replace(/\/$/, "") + "/" + DB_ROOT + "/" + path + ".json";
+  const cleanPath = path ? "/" + path : "";
+  const url = baseUrl.replace(/\/$/, "") + "/" + root + cleanPath + ".json";
   const options = {
-    method: method, contentType: "application/json", muteHttpExceptions: true,
+    method: method,
+    contentType: "application/json",
+    muteHttpExceptions: true,
     headers: { Accept: "application/json", Authorization: "Bearer " + token }
   };
   if (method === "put") options.payload = JSON.stringify(value);
@@ -460,10 +396,37 @@ function firebaseRequest_(path, method, value) {
   return text ? JSON.parse(text) : null;
 }
 
+/**
+ * One-time, non-destructive migration from the previous /htva root.
+ * Copies only exams, submissions and audit records; leaves legacy data untouched.
+ * Run manually only after confirming the destination /HTVAData is empty.
+ */
+function migrateLegacyHtvaDataToHTVAData() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const legacy = firebaseRequestAtRoot_("htva", "", "get");
+    if (!legacy || typeof legacy !== "object") return { migrated: false, reason: "NO_LEGACY_DATA" };
+    const current = firebaseRequestAtRoot_(DB_ROOT, "", "get");
+    if (current && Object.keys(current).length > 0) {
+      throw new Error("HTVAData is not empty; migration stopped to prevent overwriting data.");
+    }
+    const shared = {};
+    if (legacy.exams) shared.exams = legacy.exams;
+    if (legacy.submissions) shared.submissions = legacy.submissions;
+    if (legacy.audit) shared.audit = legacy.audit;
+    if (Object.keys(shared).length === 0) return { migrated: false, reason: "NO_SUPPORTED_DATA" };
+    firebaseRequestAtRoot_(DB_ROOT, "", "put", shared);
+    return { migrated: true, migratedSections: Object.keys(shared), legacyPreserved: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function testFirebaseConnection() {
   const token = getFirebaseAccessToken_();
   const value = dbGet_("meta/connectionTest");
-  return { ok: true, tokenObtained: !!token, connectionTestValue: value };
+  return { ok: true, tokenObtained: !!token, root: DB_ROOT, connectionTestValue: value };
 }
 
 function apiError_(code, message) {
@@ -474,9 +437,5 @@ function apiError_(code, message) {
 
 function json_(value) {
   return ContentService.createTextOutput(JSON.stringify(value))
-    .setMimeType(ContentService.MimeType.JSON);
-}
-
-function bytesToHex_(bytes) {
-  return bytes.map(function(b) { return ("0" + ((b + 256) % 256).toString(16)).slice(-2); }).join("");
+      .setMimeType(ContentService.MimeType.JSON);
 }
