@@ -15,45 +15,36 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/**
- * Minimal HTTPS client for the HTVA Ck Apps Script API.
- * The endpoint is supplied by local Gradle configuration; no Firebase credential is used here.
- */
+/** HTTPS client for the anonymous, shared HTVA Ck API. */
 public final class HtvaApiClient {
     private static final ExecutorService IO = Executors.newSingleThreadExecutor();
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
+
     private final String endpoint;
+    private final String deviceId;
 
     public interface Callback {
         void onSuccess(JSONObject data);
         void onError(String code, String message);
     }
 
-    public HtvaApiClient(String endpoint) {
+    public HtvaApiClient(String endpoint, String deviceId) {
         this.endpoint = endpoint == null ? "" : endpoint.trim();
+        this.deviceId = deviceId == null ? "" : deviceId.trim();
     }
 
-    public void login(String username, String password, Callback callback) {
-        try {
-            JSONObject payload = new JSONObject();
-            payload.put("username", username);
-            payload.put("password", password);
-            request("login", null, payload, callback);
-        } catch (Exception e) {
-            callback.onError("INVALID_REQUEST", "Không thể tạo yêu cầu đăng nhập.");
-        }
-    }
-
-    public void request(String action, String token, JSONObject payload, Callback callback) {
+    public void request(String action, JSONObject payload, Callback callback) {
         IO.execute(() -> {
             HttpURLConnection connection = null;
             try {
-                if (endpoint.isEmpty()) throw new IllegalStateException("Chưa cấu hình HTVA_API_BASE_URL.");
+                if (endpoint.isEmpty()) {
+                    throw new IllegalStateException("Chưa cấu hình HTVA_API_BASE_URL trong Gradle properties.");
+                }
                 URL url = new URL(endpoint);
                 connection = (HttpURLConnection) url.openConnection();
                 connection.setInstanceFollowRedirects(false);
                 connection.setRequestMethod("POST");
-                connection.setConnectTimeout(15000);
+                connection.setConnectTimeout(12000);
                 connection.setReadTimeout(20000);
                 connection.setDoOutput(true);
                 connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
@@ -61,7 +52,7 @@ public final class HtvaApiClient {
 
                 JSONObject body = new JSONObject();
                 body.put("action", action);
-                if (token != null) body.put("token", token);
+                body.put("deviceId", deviceId);
                 body.put("payload", payload == null ? new JSONObject() : payload);
 
                 byte[] bytes = body.toString().getBytes(StandardCharsets.UTF_8);
@@ -75,19 +66,23 @@ public final class HtvaApiClient {
                         status == HttpURLConnection.HTTP_SEE_OTHER) {
                     String location = connection.getHeaderField("Location");
                     connection.disconnect();
-                    if (location == null) throw new IllegalStateException("Máy chủ không trả về địa chỉ phản hồi.");
+                    connection = null;
+                    if (location == null) {
+                        throw new IllegalStateException("Apps Script không trả về địa chỉ phản hồi.");
+                    }
                     URL redirectUrl = new URL(location);
                     if (!"https".equalsIgnoreCase(redirectUrl.getProtocol()) ||
                             !"script.googleusercontent.com".equalsIgnoreCase(redirectUrl.getHost())) {
-                        throw new IllegalStateException("Địa chỉ chuyển hướng không an toàn.");
+                        throw new IllegalStateException("Địa chỉ chuyển hướng từ Apps Script không an toàn.");
                     }
                     connection = (HttpURLConnection) redirectUrl.openConnection();
                     connection.setRequestMethod("GET");
-                    connection.setConnectTimeout(15000);
+                    connection.setConnectTimeout(12000);
                     connection.setReadTimeout(20000);
                     connection.setRequestProperty("Accept", "application/json");
                     status = connection.getResponseCode();
                 }
+
                 InputStream stream = status >= 200 && status < 400
                         ? connection.getInputStream() : connection.getErrorStream();
                 String responseText = readAll(stream);
