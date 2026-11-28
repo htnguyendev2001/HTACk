@@ -2,19 +2,21 @@ plugins {
     id 'com.android.application'
 }
 
+def htvaApiBaseUrl = (project.findProperty("HTVA_API_BASE_URL") ?: "").toString()
+        .replace("\\", "\\\\")
+        .replace("\"", "\\\"")
+
 android {
     compileSdk 32
-
     defaultConfig {
         applicationId "com.htanh.appck"
         minSdk 21
         targetSdk 32
         versionCode 1
         versionName "1.0"
-
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField "String", "HTVA_API_BASE_URL", "\"${htvaApiBaseUrl}\""
     }
-
     buildTypes {
         release {
             minifyEnabled false
@@ -26,9 +28,7 @@ android {
         targetCompatibility JavaVersion.VERSION_1_8
     }
 }
-
 dependencies {
-
     implementation 'androidx.appcompat:appcompat:1.5.1'
     implementation 'com.google.android.material:material:1.6.1'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
