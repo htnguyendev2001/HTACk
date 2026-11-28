@@ -84,21 +84,33 @@ function requireSession_(token) {
 
 function sanitizeExamForStudent_(exam) {
   const safeExam = JSON.parse(JSON.stringify(exam));
-  ["answerKey", "correctAnswers", "solutions", "gradingRubric", "teacherIds"].forEach(function(key) {
-    delete safeExam[key];
-  });
-  (safeExam.questions || []).forEach(function(question) {
-    ["answer", "correctAnswer", "answerKey", "expectedAnswer", "solution", "explanation", "gradingRubric"].forEach(function(key) {
-      delete question[key];
-    });
-    (question.options || []).forEach(function(option) {
-      if (option && typeof option === "object") {
-        delete option.correct;
-        delete option.isCorrect;
-      }
-    });
-  });
+  stripSensitiveExamFields_(safeExam);
   return safeExam;
+}
+
+function stripSensitiveExamFields_(value) {
+  const blocked = {
+    answer: true,
+    correct: true,
+    iscorrect: true,
+    correctanswer: true,
+    answerkey: true,
+    expectedanswer: true,
+    solution: true,
+    solutions: true,
+    explanation: true,
+    gradingrubric: true,
+    correctanswers: true,
+    teacherids: true
+  };
+  if (Array.isArray(value)) {
+    value.forEach(stripSensitiveExamFields_);
+  } else if (value && typeof value === "object") {
+    Object.keys(value).forEach(function(key) {
+      if (blocked[key.toLowerCase()]) delete value[key];
+      else stripSensitiveExamFields_(value[key]);
+    });
+  }
 }
 
 function listExams_(actor) {
