@@ -69,7 +69,7 @@ Grade payload: `{ studentUid, attemptId, score, feedback }`. The server verifies
 7. Run `provisionAccount(username, password, role, displayName)` from the Apps Script editor for each teacher/student account. Never put provisioning passwords in source control.
 8. Run `provisionExam(...)` from the Apps Script editor to publish an exam and assign teacher UIDs.
 9. Set the deployed Web App URL in the local Android Gradle property `HTVA_API_BASE_URL`; do not commit a deployment URL if it is environment-specific.
-10. Verify service-account token creation and Firebase read/write access before enabling real student submissions.
+10. Run `testFirebaseConnection()` from the Apps Script editor and verify service-account token creation plus Firebase read access before enabling real student submissions.
 
 ## Known limitations before production
 
