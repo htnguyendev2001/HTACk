@@ -100,3 +100,7 @@ Nếu không có `options`, ứng dụng hiển thị ô nhập câu trả lời
 - Giữ nguyên applicationId `com.htanh.appck`; không đổi nhầm thành applicationId của HTAVk.
 
 Không tuyên bố build/test thành công nếu chưa chạy và quan sát kết quả thực tế.
+
+## Nhận diện thương hiệu
+
+Giữ nguyên bộ nhận diện đã được tích hợp trên nhánh `main`: biểu tượng ứng dụng, artwork linh vật, bảng màu pastel cam/đào và hồng. Các màn hình nghiệp vụ sử dụng chung màu nền và màu nhấn trong `res/values/colors.xml`; không thay thế hoặc xóa các tài nguyên launcher khi phát triển tính năng.
