@@ -62,7 +62,7 @@ Các Script Properties bắt buộc:
 - `FIREBASE_SERVICE_ACCOUNT_EMAIL`: email service account.
 - `FIREBASE_SERVICE_ACCOUNT_PRIVATE_KEY`: private key PEM của service account.
 
-Các giá trị trên chỉ lưu trong Script Properties, tuyệt đối không commit. Service account phải có quyền IAM Realtime Database phù hợp. Apps Script dùng JWT để lấy OAuth2 access token server-side; Firebase Rules phải chặn truy cập trực tiếp từ client. Tham khảo tài liệu xác thực REST chính thức của Firebase và kiểm tra kết nối thực tế trước khi triển khai cho học sinh.
+Các giá trị trên chỉ lưu trong Script Properties, tuyệt đối không commit. Service account phải có quyền IAM Realtime Database phù hợp. Apps Script dùng JWT để lấy OAuth2 access token server-side; Firebase Rules phải chặn truy cập trực tiếp từ client. Chạy hàm `testFirebaseConnection()` trong Apps Script editor để kiểm tra token và quyền đọc Firebase trước khi triển khai cho học sinh.
 
 ## Tài khoản và đề kiểm tra
 
