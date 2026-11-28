@@ -27,7 +27,7 @@ There is no separate Backend project. Firebase Authentication is not used. Googl
 ## Secrets and data
 
 - Never place Firebase Admin credentials, service-account keys, database secrets, password pepper, session tokens or account passwords in Android or source control.
-- Keep Firebase access server-side using Apps Script OAuth token and IAM.
+- Keep Firebase access server-side using a service-account JWT exchanged for a short-lived OAuth2 token. Store the service-account private key only in Apps Script Script Properties and grant the service account the required Firebase Realtime Database IAM role.
 - Firebase client rules deny direct reads and writes.
 - Keep data under Firebase root `htva/`.
 - Do not log passwords, tokens or full answer payloads.
