@@ -165,7 +165,24 @@ public class MainActivity extends AppCompatActivity {
         }
         Button submit = addButton("Nộp bài");
         TextView status = addText("", 14, false);
+        final String attemptId = UUID.randomUUID().toString().replace("-", "");
+        final JSONObject[] pendingPayload = new JSONObject[1];
         submit.setOnClickListener(v -> {
+            if (pendingPayload[0] != null) {
+                submit.setEnabled(false);
+                status.setText("Đang gửi lại bài...");
+                api.request("submitAttempt", sessionToken, pendingPayload[0], new HtvaApiClient.Callback() {
+                    @Override public void onSuccess(JSONObject data) {
+                        Toast.makeText(MainActivity.this, "Nộp bài thành công.", Toast.LENGTH_LONG).show();
+                        loadStudentHome();
+                    }
+                    @Override public void onError(String code, String message) {
+                        submit.setEnabled(true);
+                        status.setText(message);
+                    }
+                });
+                return;
+            }
             JSONObject answers = new JSONObject();
             try {
                 for (Map.Entry<String, View> entry : answerViews.entrySet()) {
@@ -187,15 +204,16 @@ public class MainActivity extends AppCompatActivity {
             JSONObject payload = new JSONObject();
             try {
                 payload.put("examId", examId);
-                payload.put("attemptId", UUID.randomUUID().toString().replace("-", ""));
+                payload.put("attemptId", attemptId);
                 payload.put("answers", answers);
             } catch (JSONException e) {
                 status.setText("Dữ liệu bài làm không hợp lệ.");
                 return;
             }
+            pendingPayload[0] = payload;
             submit.setEnabled(false);
             status.setText("Đang gửi bài...");
-            api.request("submitAttempt", sessionToken, payload, new HtvaApiClient.Callback() {
+            api.request("submitAttempt", sessionToken, pendingPayload[0], new HtvaApiClient.Callback() {
                 @Override public void onSuccess(JSONObject data) {
                     Toast.makeText(MainActivity.this, "Nộp bài thành công.", Toast.LENGTH_LONG).show();
                     loadStudentHome();
