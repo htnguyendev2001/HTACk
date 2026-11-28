@@ -5,7 +5,7 @@
  */
 
 const SESSION_TTL_SECONDS = 21600;
-const PBKDF2_ITERATIONS = 12000;
+const PBKDF2_ITERATIONS = 120000;
 const DB_ROOT = "htva";
 
 function doPost(e) {
@@ -103,6 +103,13 @@ function submitAttempt_(actor, payload) {
   const now = Date.now();
   if (exam.startAt && now < Number(exam.startAt)) throw apiError_("EXAM_NOT_STARTED", "Bài kiểm tra chưa bắt đầu.");
   if (exam.endAt && now > Number(exam.endAt)) throw apiError_("EXAM_CLOSED", "Bài kiểm tra đã kết thúc.");
+  const questionIds = {};
+  (exam.questions || []).forEach(function(question) { questionIds[String(question.questionId)] = true; });
+  const answerIds = Object.keys(payload.answers);
+  if (answerIds.length === 0 || answerIds.length > Object.keys(questionIds).length ||
+      answerIds.some(function(id) { return !questionIds[id]; })) {
+    throw apiError_("INVALID_ANSWERS", "Câu trả lời không khớp với cấu trúc đề kiểm tra.");
+  }
 
   const path = "submissions/" + actor.uid + "/" + attemptId;
   const existing = dbGet_(path);
@@ -150,6 +157,7 @@ function teacherSubmissions_(actor, payload) {
   const users = dbGet_("users") || {};
   const result = [];
   Object.keys(users).forEach(function(uid) {
+    if (uid === "byUsername") return;
     const submissions = dbGet_("submissions/" + uid) || {};
     Object.keys(submissions).forEach(function(attemptId) {
       const item = submissions[attemptId] || {};
@@ -314,10 +322,10 @@ function firebaseRequest_(path, method, value) {
   const baseUrl = props.getProperty("FIREBASE_DATABASE_URL");
   if (!baseUrl) throw new Error("Missing FIREBASE_DATABASE_URL Script Property.");
   const token = ScriptApp.getOAuthToken();
-  const url = baseUrl.replace(/\/$/, "") + "/" + DB_ROOT + "/" + path + ".json?access_token=" + encodeURIComponent(token);
+  const url = baseUrl.replace(/\/$/, "") + "/" + DB_ROOT + "/" + path + ".json";
   const options = {
     method: method, contentType: "application/json", muteHttpExceptions: true,
-    headers: { Accept: "application/json" }
+    headers: { Accept: "application/json", Authorization: "Bearer " + token }
   };
   if (method === "put") options.payload = JSON.stringify(value);
   const response = UrlFetchApp.fetch(url, options);
