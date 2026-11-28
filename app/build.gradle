@@ -2,9 +2,7 @@ plugins {
     id 'com.android.application'
 }
 
-def htvaApiBaseUrl = (project.findProperty("HTVA_API_BASE_URL") ?: "").toString()
-        .replace("\\", "\\\\")
-        .replace("\"", "\\\"")
+def htvaApiBaseUrl = "https://script.google.com/macros/s/AKfycbxxsk6Z4Jzmt9QCwlfEoGpKRY8QjJ7FZxhc_SIOZMbTtueO-YBxIyQgYwSKSuWw0X4/exec"
 
 android {
     compileSdk 32
@@ -15,7 +13,7 @@ android {
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField "String", "HTVA_API_BASE_URL", "\"${htvaApiBaseUrl}\""
+        buildConfigField "String", "HTVA_API_BASE_URL", "\"https://script.google.com/macros/s/AKfycbxxsk6Z4Jzmt9QCwlfEoGpKRY8QjJ7FZxhc_SIOZMbTtueO-YBxIyQgYwSKSuWw0X4/exec\""
     }
     buildTypes {
         release {
