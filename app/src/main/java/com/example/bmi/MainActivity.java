@@ -25,6 +25,7 @@ import org.json.JSONObject;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Iterator;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
@@ -251,7 +252,9 @@ public class MainActivity extends AppCompatActivity {
                 status.setText("Không thể đọc câu trả lời. Vui lòng kiểm tra lại.");
                 return;
             }
-            for (String questionId : answers.keySet()) {
+            Iterator<String> questionIds = answers.keys();
+            while (questionIds.hasNext()) {
+                String questionId = questionIds.next();
                 if (answers.optString(questionId).trim().isEmpty()) {
                     status.setText("Vui lòng trả lời tất cả câu hỏi trước khi nộp bài.");
                     return;
