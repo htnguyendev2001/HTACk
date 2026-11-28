@@ -118,7 +118,7 @@ public class MainActivity extends AppCompatActivity {
                     if (item == null) continue;
                     String state = "graded".equals(item.optString("status")) ? "Đã chấm" : "Chờ chấm";
                     String score = item.isNull("score") ? "" : " • Điểm: " + item.optString("score");
-                    addText(item.optString("examId") + " • " + state + score, 14, false);
+                    addText(item.optString("examTitle", item.optString("examId")) + " • " + state + score, 14, false);
                     if (!item.optString("feedback", "").isEmpty()) addText("Nhận xét: " + item.optString("feedback"), 13, false);
                 }
             }
@@ -249,7 +249,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void addSubmissionCard(JSONObject item) {
-        addText(item.optString("studentName", "Học sinh") + " • " + item.optString("examId"), 17, true);
+        addText(item.optString("studentName", "Học sinh") + " • " + item.optString("examTitle", item.optString("examId")), 17, true);
         addText("Mã lượt: " + item.optString("attemptId"), 12, false);
         JSONObject answers = item.optJSONObject("answers");
         JSONArray questions = item.optJSONArray("questions");
