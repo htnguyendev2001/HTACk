@@ -72,14 +72,21 @@ function login_(payload) {
   const sessionUser = { uid: user.uid, role: user.role, displayName: user.displayName || "" };
   CacheService.getScriptCache().put("session:" + token, JSON.stringify(sessionUser), SESSION_TTL_SECONDS);
   audit_(sessionUser.uid, "login", user.uid);
-  return { ok: true, data: { token: token, expiresIn: SESSION_TTL_SECONDS, user: sessionUser } };
+  return { token: token, expiresIn: SESSION_TTL_SECONDS, user: sessionUser };
 }
 
 function requireSession_(token) {
   if (!token || String(token).length < 32) throw apiError_("UNAUTHORIZED", "Phiên đăng nhập không hợp lệ.");
-  const raw = CacheService.getScriptCache().get("session:" + token);
+  const cache = CacheService.getScriptCache();
+  const raw = cache.get("session:" + token);
   if (!raw) throw apiError_("SESSION_EXPIRED", "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
-  return JSON.parse(raw);
+  const session = JSON.parse(raw);
+  const user = dbGet_("users/" + safeId_(session.uid, "uid"));
+  if (!user || user.active !== true || user.role !== session.role) {
+    cache.remove("session:" + token);
+    throw apiError_("SESSION_REVOKED", "Tài khoản đã bị khóa hoặc thay đổi quyền. Vui lòng đăng nhập lại.");
+  }
+  return { uid: user.uid, role: user.role, displayName: user.displayName || "" };
 }
 
 function sanitizeExamForStudent_(exam) {
